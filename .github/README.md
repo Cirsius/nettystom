@@ -1,7 +1,7 @@
 ![banner](banner_dark.png#gh-dark-mode-only)
 ![banner](banner_light.png#gh-light-mode-only)
 
-# Minestom
+# Nettystom
 
 [![license](https://img.shields.io/github/license/Minestom/Minestom?style=for-the-badge&color=b2204c)](../LICENSE)
 [![standard-readme compliant](https://img.shields.io/badge/readme%20style-standard-brightgreen.svg?style=for-the-badge)](https://github.com/RichardLitt/standard-readme)  
@@ -9,16 +9,24 @@
 [![wiki](https://img.shields.io/badge/documentation-wiki-74aad6?style=for-the-badge)](https://wiki.minestom.net/)
 [![discord-banner](https://img.shields.io/discord/706185253441634317?label=discord&style=for-the-badge&color=7289da)](https://discord.gg/pkFRvqB)
 
-Minestom is an open-source library that enables developers to create their own Minecraft server software, without any code from Mojang.
+Nettystom is an open-source library that enables developers to create their own Minecraft server software, without any code from Mojang.
 
-The main difference between Mojang's vanilla server and a minestom-based server, is that ours does not contain any features by default!
-However, we have a complete API which is designed to allow you to make anything possible, with ease.
+> [!NOTE]
+> Nettystom is a fork of [Minestom](https://github.com/Minestom/Minestom) whose **networking layer has been rebuilt on top of [Netty](https://netty.io/)** — hence the name. It still builds on the upstream `net.minestom` artifacts, packages and documentation, so the public Minestom API, wiki and javadocs apply directly here; only the low-level socket/buffer internals differ. See [What's different from Minestom](#whats-different-from-minestom) for details.
 
-This is a developer API not meant to be used by end-users. Replacing Bukkit/Forge/Sponge with this **will not work** since we do not implement any of their APIs.
+The main difference between Mojang's vanilla server and a Nettystom-based server is that ours does not contain any features by default!
+Instead, we provide a complete, modern API designed to let you build anything you want, with ease.
+
+> [!IMPORTANT]
+> This is a developer API, not a drop-in server meant to be used by end-users. Replacing Bukkit/Forge/Sponge with Nettystom **will not work**, since we do not implement any of their APIs. You write your server in Java (or another JVM language) on top of the Nettystom library.
+
+Nettystom currently targets **Minecraft 1.21.11** and requires **Java 25 or newer**.
 
 # Table of contents
+- [What's different from Minestom](#whats-different-from-minestom)
 - [Install](#install)
 - [Usage](#usage)
+- [Quick start](#quick-start)
 - [Why Minestom?](#why-minestom)
 - [Advantages & Disadvantages](#advantages-and-disadvantages)
 - [API](#api)
@@ -26,10 +34,23 @@ This is a developer API not meant to be used by end-users. Replacing Bukkit/Forg
 - [Contributing](#contributing)
 - [License](#license)
 
+# What's different from Minestom
+Nettystom keeps the entire high-level Minestom API but replaces the hand-written NIO networking stack with [Netty](https://netty.io/) (`4.1.132.Final`). If you only use the public API (`MinecraftServer`, instances, events, …) nothing changes; the differences live in the network layer:
+
+* **Netty-based socket server** — `net.minestom.server.network.socket.Server` and `PlayerSocketConnection` are now driven by Netty channels instead of raw `java.nio` selectors.
+* **`NetworkBuffer` backed by Netty `ByteBuf`** — buffer reading/writing and memory management are delegated to Netty's pooled buffers for better throughput and reduced allocations.
+* **Proper packet framing** — a new `MinecraftVarintFrameDecoder` (a Netty `ByteToMessageDecoder`) frames Minecraft's varint-length-prefixed packets and guards against oversized frames (2 MiB limit).
+* **New dependency & module requirements** — the build pulls in Netty, and `module-info.java` now requires `io.netty.buffer`, `io.netty.codec`, `io.netty.transport`, `io.netty.transport.unix.common`, `io.netty.transport.classes.epoll` and `io.netty.common`.
+
+Everything in the sections below (install, API, instances, blocks, …) behaves the same as upstream Minestom unless noted otherwise.
+
 # Install
-Minestom is not installed like Bukkit/Forge/Sponge.
-As Minestom is a Java library, it must be loaded the same way any other Java library may be loaded.
-This means you need to add Minestom as a dependency, add your code and compile by yourself.
+Nettystom is not installed like Bukkit/Forge/Sponge.
+As Nettystom is a Java library, it must be loaded the same way any other Java library may be loaded.
+This means you need to add it as a dependency, add your code and compile by yourself.
+
+> [!NOTE]
+> Nettystom builds and publishes under the upstream `net.minestom` coordinates, so the dependency declarations below are identical to Minestom. The published artifacts are the Netty-based build of this fork.
 
 Minestom is available on [Maven Central](https://mvnrepository.com/artifact/net.minestom/minestom),
 and can be installed like the following (Gradle/Kotlin):
@@ -86,21 +107,55 @@ To pin the snapshot version to a specific release you can reference the exact bu
 </details>
 
 # Usage
-An example of how to use the Minestom library is available [here](/demo).
-Alternatively you can check the official [wiki](https://wiki.minestom.net/) or the [javadocs](https://minestom.github.io/Minestom/).
+A full example of how to use the library is available [here](/demo).
+Alternatively you can check the official Minestom [wiki](https://wiki.minestom.net/) or the [javadocs](https://javadoc.minestom.net) — the public API is shared with Nettystom.
+
+# Quick start
+The snippet below boots a minimal server: it creates an instance, generates a simple flat world, and spawns players on it. Run it on Java 25+ and connect with a Minecraft 1.21.11 client on `localhost:25565`.
+
+```java
+public class Server {
+    public static void main(String[] args) {
+        // Initialize the server
+        MinecraftServer minecraftServer = MinecraftServer.init();
+
+        // Create an in-memory instance (a "world") and fill the floor with blocks
+        InstanceManager instanceManager = MinecraftServer.getInstanceManager();
+        InstanceContainer instance = instanceManager.createInstanceContainer();
+        instance.setGenerator(unit ->
+                unit.modifier().fillHeight(0, 40, Block.GRASS_BLOCK));
+
+        // Spawn every player on the instance at a fixed position
+        GlobalEventHandler eventHandler = MinecraftServer.getGlobalEventHandler();
+        eventHandler.addListener(AsyncPlayerConfigurationEvent.class, event -> {
+            event.setSpawningInstance(instance);
+            event.getPlayer().setRespawnPoint(new Pos(0, 42, 0));
+        });
+
+        // Start listening for connections
+        minecraftServer.start("0.0.0.0", 25565);
+    }
+}
+```
+
+> [!NOTE]
+> The server above runs in offline mode. To enable Mojang authentication call `MojangAuth.init()` before starting the server.
 
 # Why Minestom?
 Minecraft has evolved a lot since its release, most of the servers today do not take advantage of vanilla features and even have to struggle because of them.
 Our target audience is those who want to make a server that benefits little from vanilla features. e.g. creative, kitpvp.
 The goal is to offer more performance for those who need it.
-In other words, it makes sense to use Minestom when it takes less time to implement every missing vanilla feature you want than removing every vanilla feature that will slow you down.
+In other words, it makes sense to use Minestom (and Nettystom) when it takes less time to implement every missing vanilla feature you want than removing every vanilla feature that will slow you down.
+
+Nettystom inherits this philosophy and goes one step further on performance by running its networking on Netty.
 
 # Advantages and Disadvantages
-Minestom isn't perfect, our choices make it much better for some cases, worse for some others.
+Nettystom isn't perfect, our choices make it much better for some cases, worse for some others.
 
 ## Advantages
 * Remove the overhead of vanilla features
 * Multi-threaded
+* Netty-based networking layer (pooled buffers, mature transport)
 * Instance system (Collections of blocks and entities) which is much more scalable than worlds
 * Open-source
 * Modern API
@@ -124,12 +179,12 @@ Being able to create instances directly on the go is a must-have, we believe it 
 Instances also come with performance benefits, unlike some others which will be fully single-threaded or maybe using one thread per world we are using a set number of threads (pool) to manage all chunks independently from instances, meaning using more CPU power.
 
 ## Blocks
-Minestom by default does not know what is a chest, you will have to tell him that it opens an inventory. 
-Every "special blocks" (which aren't only visual) need a specialized handler. After applying this handler, you have a block that can be placed anywhere simply.
-However, all blocks are visually there, they just won't have interaction by default.
+By default, Nettystom does not know what a chest is; you have to tell it that the block should open an inventory.
+Every "special" block (one that isn't purely visual) needs a specialized handler. Once that handler is applied, you have a block that can be placed anywhere.
+All blocks are still visually there, they simply won't have any interaction by default.
 
 ## Entities
-The terms "passive" or "aggressive" monsters do not exist, nobody stops you from making a flying chicken rushing into any players coming too close, doing so with NMS is a real mess because of obfuscation and the large inheritance.
+The terms "passive" or "aggressive" monsters do not exist; nothing stops you from making a flying chicken rush at any player coming too close. Doing the same with NMS is a real mess because of obfuscation and the deep inheritance hierarchy.
 
 ## Inventories
 It is a field where Minecraft evolved a lot, inventories are now used a lot as client<->server interface with clickable items and callback, we support these interactions natively without the need of programming your solution.
@@ -138,7 +193,8 @@ It is a field where Minecraft evolved a lot, inventories are now used a lot as c
 Commands are the simplest way of communication between clients and server. Since 1.13 Minecraft has incorporated a new library denominated "Brigadier", we then integrated an API designed to use the full potential of args types.
 
 # Credits
-* The [contributors](https://github.com/Minestom/Minestom/graphs/contributors) of the project
+* [Minestom](https://github.com/Minestom/Minestom) and its [contributors](https://github.com/Minestom/Minestom/graphs/contributors) — Nettystom is a fork of their work
+* [Netty](https://netty.io/) — the networking framework this fork is built on
 * [The Minecraft Coalition](https://minecraft.wiki/w/Minecraft_Wiki:Projects/wiki.vg_merge) and [`#mcdevs`](https://github.com/mcdevs) -
    protocol and file formats research.
 * [The Minecraft Wiki](https://minecraft.wiki) for all their useful info
