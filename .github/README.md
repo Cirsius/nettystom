@@ -11,14 +11,18 @@
 
 Minestom is an open-source library that enables developers to create their own Minecraft server software, without any code from Mojang.
 
-The main difference between Mojang's vanilla server and a minestom-based server, is that ours does not contain any features by default!
-However, we have a complete API which is designed to allow you to make anything possible, with ease.
+The main difference between Mojang's vanilla server and a Minestom-based server is that ours does not contain any features by default!
+Instead, we provide a complete, modern API designed to let you build anything you want, with ease.
 
-This is a developer API not meant to be used by end-users. Replacing Bukkit/Forge/Sponge with this **will not work** since we do not implement any of their APIs.
+> [!IMPORTANT]
+> This is a developer API, not a drop-in server meant to be used by end-users. Replacing Bukkit/Forge/Sponge with Minestom **will not work**, since we do not implement any of their APIs. You write your server in Java (or another JVM language) on top of the Minestom library.
+
+Minestom currently targets **Minecraft 1.21.11** and requires **Java 25 or newer**.
 
 # Table of contents
 - [Install](#install)
 - [Usage](#usage)
+- [Quick start](#quick-start)
 - [Why Minestom?](#why-minestom)
 - [Advantages & Disadvantages](#advantages-and-disadvantages)
 - [API](#api)
@@ -86,8 +90,39 @@ To pin the snapshot version to a specific release you can reference the exact bu
 </details>
 
 # Usage
-An example of how to use the Minestom library is available [here](/demo).
-Alternatively you can check the official [wiki](https://wiki.minestom.net/) or the [javadocs](https://minestom.github.io/Minestom/).
+A full example of how to use the Minestom library is available [here](/demo).
+Alternatively you can check the official [wiki](https://wiki.minestom.net/) or the [javadocs](https://javadoc.minestom.net).
+
+# Quick start
+The snippet below boots a minimal server: it creates an instance, generates a simple flat world, and spawns players on it. Run it on Java 25+ and connect with a Minecraft 1.21.11 client on `localhost:25565`.
+
+```java
+public class Server {
+    public static void main(String[] args) {
+        // Initialize the server
+        MinecraftServer minecraftServer = MinecraftServer.init();
+
+        // Create an in-memory instance (a "world") and fill the floor with blocks
+        InstanceManager instanceManager = MinecraftServer.getInstanceManager();
+        InstanceContainer instance = instanceManager.createInstanceContainer();
+        instance.setGenerator(unit ->
+                unit.modifier().fillHeight(0, 40, Block.GRASS_BLOCK));
+
+        // Spawn every player on the instance at a fixed position
+        GlobalEventHandler eventHandler = MinecraftServer.getGlobalEventHandler();
+        eventHandler.addListener(AsyncPlayerConfigurationEvent.class, event -> {
+            event.setSpawningInstance(instance);
+            event.getPlayer().setRespawnPoint(new Pos(0, 42, 0));
+        });
+
+        // Start listening for connections
+        minecraftServer.start("0.0.0.0", 25565);
+    }
+}
+```
+
+> [!NOTE]
+> The server above runs in offline mode. To enable Mojang authentication call `MojangAuth.init()` before starting the server.
 
 # Why Minestom?
 Minecraft has evolved a lot since its release, most of the servers today do not take advantage of vanilla features and even have to struggle because of them.
@@ -124,12 +159,12 @@ Being able to create instances directly on the go is a must-have, we believe it 
 Instances also come with performance benefits, unlike some others which will be fully single-threaded or maybe using one thread per world we are using a set number of threads (pool) to manage all chunks independently from instances, meaning using more CPU power.
 
 ## Blocks
-Minestom by default does not know what is a chest, you will have to tell him that it opens an inventory. 
-Every "special blocks" (which aren't only visual) need a specialized handler. After applying this handler, you have a block that can be placed anywhere simply.
-However, all blocks are visually there, they just won't have interaction by default.
+By default, Minestom does not know what a chest is; you have to tell it that the block should open an inventory.
+Every "special" block (one that isn't purely visual) needs a specialized handler. Once that handler is applied, you have a block that can be placed anywhere.
+All blocks are still visually there, they simply won't have any interaction by default.
 
 ## Entities
-The terms "passive" or "aggressive" monsters do not exist, nobody stops you from making a flying chicken rushing into any players coming too close, doing so with NMS is a real mess because of obfuscation and the large inheritance.
+The terms "passive" or "aggressive" monsters do not exist; nothing stops you from making a flying chicken rush at any player coming too close. Doing the same with NMS is a real mess because of obfuscation and the deep inheritance hierarchy.
 
 ## Inventories
 It is a field where Minecraft evolved a lot, inventories are now used a lot as client<->server interface with clickable items and callback, we support these interactions natively without the need of programming your solution.
