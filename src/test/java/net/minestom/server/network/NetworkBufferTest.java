@@ -11,6 +11,10 @@ import org.jetbrains.annotations.UnknownNullability;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
+import java.lang.foreign.Arena;
+import java.lang.foreign.MemorySegment;
+import java.lang.foreign.ValueLayout;
+import java.lang.ref.WeakReference;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.function.Consumer;
@@ -18,6 +22,7 @@ import java.util.function.Function;
 
 import static net.kyori.adventure.nbt.IntBinaryTag.intBinaryTag;
 import static net.minestom.server.network.NetworkBuffer.*;
+import static net.minestom.testing.TestUtils.waitUntilCleared;
 import static org.junit.jupiter.api.Assertions.*;
 
 public class NetworkBufferTest {
@@ -44,6 +49,11 @@ public class NetworkBufferTest {
 
         assertEquals((byte) 3, buffer.read(BYTE));
         assertEquals((byte) 4, buffer.read(BYTE));
+    }
+
+    @Test
+    public void garbageCollected() {
+        waitUntilCleared(new WeakReference<>(NetworkBuffer.staticBuffer(1024)));
     }
 
     @Test
@@ -225,6 +235,60 @@ public class NetworkBufferTest {
         assertEquals(50L, buffer.read(LONG));
 
         assertEquals(9, buffer.readIndex());
+    }
+
+    @Test
+    public void segmentWrap() {
+        try (var arena = Arena.ofConfined()) {
+            final MemorySegment segment = arena.allocate(512);
+            var buffer = NetworkBuffer.wrap(segment, 0L, 0L);
+            assertEquals(0, buffer.writeIndex());
+            assertEquals(0, buffer.readIndex());
+            assertEquals(512,  buffer.capacity());
+            assertFalse(buffer.isReadOnly());
+
+            buffer.write(BYTE, (byte) 1);
+            buffer.write(LONG, 50L);
+            buffer.write(FLOAT, 3.5f);
+
+            assertEquals(0, buffer.readIndex());
+            assertEquals(13, buffer.writeIndex());
+
+            assertEquals((byte) 1, buffer.read(BYTE));
+            assertEquals(50L, buffer.read(LONG));
+            assertEquals(3.5f, buffer.read(FLOAT));
+
+            assertEquals(13, buffer.readIndex());
+            assertEquals(13, buffer.writeIndex());
+
+            // Rewrapping shouldn't carry anything except the data
+            var buffer2 = NetworkBuffer.wrap(segment.asReadOnly(), 0L, 0L);
+            assertEquals(0, buffer2.writeIndex());
+            assertEquals(0, buffer2.readIndex());
+            assertTrue(buffer2.isReadOnly());
+
+            assertFalse(buffer.isReadOnly(), "OG buffer should still be writeable");
+
+            buffer2.writeIndex(buffer.writeIndex());
+            assertEquals(13,  buffer2.writeIndex());
+
+            assertEquals((byte) 1, buffer2.read(BYTE));
+            assertEquals(50L, buffer2.read(LONG));
+            assertEquals(3.5f, buffer2.read(FLOAT));
+
+            assertEquals(13, buffer2.readIndex());
+        }
+    }
+
+    @Test
+    public void segmentWrapScope() {
+        NetworkBuffer buffer;
+        try (var arena = Arena.ofConfined()) {
+            final MemorySegment segment = arena.allocate(512);
+            buffer = NetworkBuffer.wrap(segment, 0L, 0L);
+            buffer.write(BYTE, (byte) 1);
+        }
+        assertThrows(Exception.class, () -> buffer.read(BYTE));
     }
 
     @Test
@@ -414,6 +478,43 @@ public class NetworkBufferTest {
     }
 
     @Test
+    public void copyTo() {
+        var array = new byte[]{0x01, 0x02, 0x03, 0x04, 0x05};
+        var buffer = NetworkBuffer.wrap(array, 0, 5);
+        assertEquals(0, buffer.readIndex());
+        assertEquals(array.length, buffer.writeIndex());
+
+        byte[] dest = new byte[6];
+        buffer.copyTo(1, dest, 2, 3);
+
+        assertArrayEquals(new byte[]{0, 0, 0x02, 0x03, 0x04, 0}, dest);
+
+        assertEquals(0, buffer.readIndex());
+        assertEquals(array.length, buffer.writeIndex());
+    }
+
+    @Test
+    public void copyToSegment() {
+        var array = new byte[]{0x01, 0x02, 0x03, 0x04, 0x05};
+        var buffer = NetworkBuffer.wrap(array, 0, 5);
+        assertEquals(0, buffer.readIndex());
+        assertEquals(array.length, buffer.writeIndex());
+
+        try (var arena = Arena.ofConfined()) {
+            MemorySegment dest = arena.allocate(6);
+            buffer.copyTo(1, dest, 2, 3);
+
+            assertEquals(0, buffer.readIndex());
+            assertEquals((byte) 0x02, dest.get(ValueLayout.JAVA_BYTE, 2));
+            assertEquals((byte) 0x03, dest.get(ValueLayout.JAVA_BYTE, 3));
+            assertEquals((byte) 0x04, dest.get(ValueLayout.JAVA_BYTE, 4));
+        }
+
+        assertEquals(0, buffer.readIndex());
+        assertEquals(array.length, buffer.writeIndex());
+    }
+
+    @Test
     public void string() {
         assertBufferType(STRING, "Hello World", new byte[]{0x0B, 0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x20, 0x57, 0x6f, 0x72, 0x6c, 0x64});
     }
@@ -466,6 +567,34 @@ public class NetworkBufferTest {
     }
 
     @Test
+    public void maxLength() {
+        var buffer = NetworkBuffer.resizableBuffer();
+
+        buffer.write(BOOLEAN.maxLength(1), true);
+        assertThrows(IllegalArgumentException.class, () -> buffer.write(INT.maxLength(3), 1));
+        buffer.write(INT.maxLength(4), 1);
+
+        assertTrue(buffer.read(BOOLEAN.maxLength(1)));
+        assertEquals(1, buffer.read(INT.maxLength(4)));
+    }
+
+    @Test
+    public void maxLengthList() {
+        var buffer = NetworkBuffer.resizableBuffer();
+        assertThrows(IllegalArgumentException.class, () -> buffer.write(INT.list().maxLength(3), List.of(1)));
+        assertThrows(IllegalArgumentException.class, () -> buffer.write(INT.list().maxLength(4), List.of(1)));
+        assertThrows(IllegalArgumentException.class, () -> buffer.write(INT.list().maxLength(8), List.of(1, 2)));
+        assertThrows(IllegalArgumentException.class, () -> buffer.write(INT.list().maxLength(4), List.of(1, 2)));
+        assertThrows(IllegalArgumentException.class, () -> buffer.write(INT.list().maxLength(5), List.of(1, 2)));
+
+        buffer.write(INT.list().maxLength(9), List.of(1));
+        buffer.write(INT.list().maxLength(14), List.of(1, 2));
+
+        assertEquals(List.of(1), buffer.read(INT.list().maxLength(9)));
+        assertEquals(List.of(1, 2), buffer.read(INT.list().maxLength(14)));
+    }
+
+    @Test
     public void oomStringRegression() {
         var buffer = NetworkBuffer.resizableBuffer(100);
         buffer.write(VAR_INT, Integer.MAX_VALUE); // String length
@@ -491,7 +620,6 @@ public class NetworkBufferTest {
 
         assertBufferType(STRING_IO_UTF8, "Hello", stream.toByteArray());
     }
-
 
     @Test
     public void testStringUtf8ModifiedRead() throws IOException {
@@ -582,7 +710,7 @@ public class NetworkBufferTest {
     }
 
     static <T> void assertBufferTypeOptional(NetworkBuffer.Type<T> type, @Nullable T value, byte @Nullable [] expected) {
-        assertBufferType(type, value, expected, new Action<T>() {
+        assertBufferType(type, value, expected, new Action<>() {
             @Override
             public void write(NetworkBuffer buffer, NetworkBuffer.Type<T> type, @UnknownNullability T value) {
                 buffer.write(type.optional(), value);

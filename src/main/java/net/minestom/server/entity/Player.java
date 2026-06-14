@@ -2,7 +2,6 @@ package net.minestom.server.entity;
 
 import it.unimi.dsi.fastutil.longs.LongArrayPriorityQueue;
 import it.unimi.dsi.fastutil.longs.LongPriorityQueue;
-import net.kyori.adventure.audience.MessageType;
 import net.kyori.adventure.bossbar.BossBar;
 import net.kyori.adventure.dialog.DialogLike;
 import net.kyori.adventure.identity.Identity;
@@ -33,7 +32,6 @@ import net.minestom.server.command.CommandSender;
 import net.minestom.server.component.DataComponents;
 import net.minestom.server.coordinate.*;
 import net.minestom.server.dialog.Dialog;
-import net.minestom.server.entity.attribute.Attribute;
 import net.minestom.server.entity.metadata.LivingEntityMeta;
 import net.minestom.server.entity.metadata.avatar.PlayerMeta;
 import net.minestom.server.entity.vehicle.PlayerInputs;
@@ -145,6 +143,8 @@ public class Player extends LivingEntity implements CommandSender, HoverEventSou
 
     private volatile int latency;
     private Component displayName;
+    private boolean listed = true;
+    private int listOrder;
     private PlayerSkin skin;
 
     private Instance pendingInstance = null;
@@ -200,7 +200,7 @@ public class Player extends LivingEntity implements CommandSender, HoverEventSou
 
     private long startItemUseTime;
     private long itemUseTime;
-    private PlayerHand itemUseHand;
+    private @Nullable PlayerHand itemUseHand;
 
     // Game state (https://minecraft.wiki/w/Minecraft_Wiki:Projects/wiki.vg_merge/Protocol#Game_Event)
     private boolean enableRespawnScreen;
@@ -254,7 +254,6 @@ public class Player extends LivingEntity implements CommandSender, HoverEventSou
         this.gameMode = GameMode.SURVIVAL;
         this.dimensionTypeId = DIMENSION_TYPE_REGISTRY.getId(DimensionType.OVERWORLD); // Default dimension
         this.levelFlat = true;
-        getAttribute(Attribute.MOVEMENT_SPEED).setBaseValue(0.1);
 
         // FakePlayer init its connection there
         playerConnectionInit();
@@ -329,9 +328,6 @@ public class Player extends LivingEntity implements CommandSender, HoverEventSou
         for (var player : connectionManager.getOnlinePlayers()) {
             if (player != this) {
                 sendPacket(player.getAddPlayerToList());
-                if (player.displayName != null) {
-                    sendPacket(new PlayerInfoUpdatePacket(PlayerInfoUpdatePacket.Action.UPDATE_DISPLAY_NAME, player.infoEntry()));
-                }
             }
         }
 
@@ -532,6 +528,7 @@ public class Player extends LivingEntity implements CommandSender, HoverEventSou
         sendPacket(new SetExperiencePacket(exp, level, 0));
         triggerStatus((byte) (EntityStatuses.Player.PERMISSION_LEVEL_0 + permissionLevel)); // Set permission level
         refreshAbilities();
+        sendPacket(instance.createTimePacket());
     }
 
     /**
@@ -900,10 +897,8 @@ public class Player extends LivingEntity implements CommandSender, HoverEventSou
     }
 
     @Override
-    @SuppressWarnings({"UnstableApiUsage", "deprecation"})
-    public void sendMessage(final Identity source, final Component message, final MessageType type) {
-        // Note to readers: this method may be deprecated, however it is in fact required.
-        Messenger.sendMessage(this, message, ChatPosition.fromMessageType(type), source.uuid());
+    public void sendMessage(Component message) {
+        Messenger.sendMessage(this, message, ChatPosition.SYSTEM_MESSAGE);
     }
 
     /**
@@ -1186,7 +1181,57 @@ public class Player extends LivingEntity implements CommandSender, HoverEventSou
      */
     public void setDisplayName(@Nullable Component displayName) {
         this.displayName = displayName;
-        PacketSendingUtils.broadcastPlayPacket(new PlayerInfoUpdatePacket(PlayerInfoUpdatePacket.Action.UPDATE_DISPLAY_NAME, infoEntry()));
+        if (isActive()) {
+            PacketSendingUtils.broadcastPlayPacket(new PlayerInfoUpdatePacket(PlayerInfoUpdatePacket.Action.UPDATE_DISPLAY_NAME, infoEntry()));
+        }
+    }
+
+    /**
+     * Gets whether the player is listed in the tab-list
+     *
+     * @return true if the player is being displayed in the tab-list, false if they aren't
+     */
+    public boolean isListed() {
+        return listed;
+    }
+
+    /**
+     * Changes whether the player should be displayed in the tab-list.
+     *
+     * @param listed whether the player should be displayed in the tab-list
+     */
+    public void setListed(boolean listed) {
+        this.listed = listed;
+        if (isActive()) {
+            PacketSendingUtils.broadcastPlayPacket(new PlayerInfoUpdatePacket(PlayerInfoUpdatePacket.Action.UPDATE_LISTED, infoEntry()));
+        }
+    }
+
+    /**
+     * Gets the tab-list listing order of the player.
+     * <p>
+     * See {@link Player#setListOrder(int)} for further documentation.
+     *
+     * @return the order the player has for the tab-list
+     */
+    public int getListOrder() {
+        return listOrder;
+    }
+
+    /**
+     * Sets the tab-list listing priority of the player. This is also affected by other factors such as: whether the
+     * player is spectating, their team name, and their username.
+     * <p>
+     * More information can be found <a href="https://minecraft.wiki/w/Java_Edition_protocol/Packets#player-info:player-actions">here</a>.
+     *
+     * @param listOrder the order in which the player should be displayed in the tab-list. A higher number means
+     *                  the player will appear higher in the tab-list.
+     */
+    public void setListOrder(int listOrder) {
+        this.listOrder = listOrder;
+        if (isActive()) {
+            PacketSendingUtils.broadcastPlayPacket(new PlayerInfoUpdatePacket(PlayerInfoUpdatePacket.Action.UPDATE_LIST_ORDER, infoEntry()));
+        }
     }
 
     /**
@@ -1331,7 +1376,7 @@ public class Player extends LivingEntity implements CommandSender, HoverEventSou
 
     @Override
     public void clearResourcePacks() {
-        sendPacket(new ResourcePackPopPacket((UUID) null));
+        sendPacket(new ResourcePackPopPacket(null));
     }
 
     /**
@@ -2243,17 +2288,16 @@ public class Player extends LivingEntity implements CommandSender, HoverEventSou
     }
 
     /**
-     * Gets the packet to add the player from the tab-list.
+     * Gets the packet to add the player.
      *
      * @return a {@link PlayerInfoUpdatePacket} to add the player
      */
     protected PlayerInfoUpdatePacket getAddPlayerToList() {
-        return new PlayerInfoUpdatePacket(EnumSet.of(PlayerInfoUpdatePacket.Action.ADD_PLAYER, PlayerInfoUpdatePacket.Action.UPDATE_LISTED),
-                List.of(infoEntry()));
+        return new PlayerInfoUpdatePacket(EnumSet.allOf(PlayerInfoUpdatePacket.Action.class), List.of(infoEntry()));
     }
 
     /**
-     * Gets the packet to remove the player from the tab-list.
+     * Gets the packet to remove the player.
      *
      * @return a {@link PlayerInfoRemovePacket} to remove the player
      */
@@ -2268,7 +2312,7 @@ public class Player extends LivingEntity implements CommandSender, HoverEventSou
                 List.of();
         byte hatIndex = ((MetadataDef.Entry.BitMask) MetadataDef.Player.IS_HAT_ENABLED).bitMask();
         return new PlayerInfoUpdatePacket.Entry(getUuid(), getUsername(), prop,
-                true, getLatency(), getGameMode(), displayName, null, 0, (settings.displayedSkinParts() & hatIndex) == hatIndex);
+                listed, getLatency(), getGameMode(), displayName, null, listOrder, (settings.displayedSkinParts() & hatIndex) == hatIndex);
     }
 
     /**
@@ -2397,6 +2441,7 @@ public class Player extends LivingEntity implements CommandSender, HoverEventSou
 
     /**
      * Gets the client's 'effective' view distance, which is the minimum of the client's view distance settings, and the local instance settings, plus one
+     *
      * @return The effective chunk view distance range of the client
      */
     public int effectiveViewDistance() {

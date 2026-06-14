@@ -17,30 +17,14 @@ import net.minestom.server.network.packet.PacketParser;
 import net.minestom.server.network.packet.PacketVanilla;
 import net.minestom.server.network.packet.client.ClientPacket;
 import net.minestom.server.network.player.PlayerSocketConnection;
-import net.minestom.server.utils.validate.Check;
 import org.jetbrains.annotations.ApiStatus;
 
 import java.io.IOException;
 import java.net.*;
 
-/**
- * TCP server backed by Netty, replacing the former {@code java.nio.channels.ServerSocketChannel}
- * implementation.
- *
- * <p>Uses {@link EpollEventLoopGroup} on Linux (best performance) and falls
- * back to {@link NioEventLoopGroup} everywhere else.
- *
- * <ul>
- *   <li>No {@code java.nio.channels.*} imports (except the whitelisted
- *       {@code java.nio.charset.*} and {@code java.nio.file.*}).</li>
- *   <li>No {@code sun.misc.Unsafe}.</li>
- *   <li>Player read/write loops are driven by Netty's event loop rather than
- *       hand-rolled virtual threads.</li>
- * </ul>
- */
 public final class Server {
 
-    private final PacketParser<ClientPacket> packetParser;
+    private final PacketParser.Client packetParser;
 
     private volatile boolean stop;
     private EventLoopGroup bossGroup;
@@ -51,7 +35,7 @@ public final class Server {
     private String address;
     private int port;
 
-    public Server(PacketParser<ClientPacket> packetParser) {
+    public Server(PacketParser.Client packetParser) {
         this.packetParser = packetParser;
     }
 
@@ -102,7 +86,7 @@ public final class Server {
                     protected void initChannel(SocketChannel ch) {
                         final ChannelPipeline pipeline = ch.pipeline();
 
-                        // Frame splitter - reads the varint-length-prefixed packets
+                        // reads the varint-length-prefixed packets
                         pipeline.addLast("frame-decoder", new MinecraftVarintFrameDecoder());
 
                         final PlayerSocketConnection conn =
@@ -149,7 +133,7 @@ public final class Server {
 
 
     @ApiStatus.Internal
-    public PacketParser<ClientPacket> packetParser() {
+    public PacketParser.Client packetParser() {
         return packetParser;
     }
 

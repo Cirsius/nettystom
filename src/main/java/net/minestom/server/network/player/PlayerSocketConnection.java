@@ -41,43 +41,34 @@ import org.jetbrains.annotations.Nullable;
 
 import javax.crypto.Cipher;
 import javax.crypto.SecretKey;
+import java.io.EOFException;
 import java.io.IOException;
 import java.net.SocketAddress;
+import java.nio.channels.SocketChannel;
 import java.util.Collection;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.LockSupport;
 import java.util.zip.DataFormatException;
 
-/**
- * Represents a single player's network connection, driven entirely by the
- * Netty event loop.
- *
- * <p>Key differences from the previous implementation:
- * <ul>
- *   <li>{@code java.nio.channels.SocketChannel} → Netty {@link Channel}.</li>
- *   <li>Manual read/write virtual-thread loops → Netty
- *       {@link ChannelDuplexHandler} ({@link ConnectionHandler}).</li>
- *   <li>Raw {@code NetworkBuffer.readChannel} / {@code writeChannel} replaced
- *       by {@link NetworkBuffer#readFromByteBuf} / {@link NetworkBuffer#writeToByteBuf}.</li>
- *   <li>No {@code java.nio.*} imports outside the whitelist.</li>
- * </ul>
- */
+
 @ApiStatus.Internal
 public class PlayerSocketConnection extends PlayerConnection {
 
     private static final Set<Class<? extends ClientPacket>> IMMEDIATE_PROCESS_PACKETS = Set.of(
-            ClientHandshakePacket.class,
+            ClientHandshakePacket.class, // First received packet
             ClientCookieResponsePacket.class,
             StatusRequestPacket.class,
             ClientPingRequestPacket.class,
-            ClientKeepAlivePacket.class,
+            ClientKeepAlivePacket.class, // Used to calculate latency
             ClientLoginStartPacket.class,
-            ClientEncryptionResponsePacket.class,
+            ClientEncryptionResponsePacket.class, // Auth request
             ClientLoginPluginResponsePacket.class,
-            ClientSelectKnownPacksPacket.class,
-            ClientLoginAcknowledgedPacket.class,
-            ClientFinishConfigurationPacket.class
+            ClientSelectKnownPacksPacket.class, // Immediate answer to server request on config
+            ClientLoginAcknowledgedPacket.class, // Handle config state
+            ClientFinishConfigurationPacket.class // Enter play state
     );
 
     private final Channel channel;
@@ -95,25 +86,20 @@ public class PlayerSocketConnection extends PlayerConnection {
     private int serverPort;
     private int protocolVersion;
 
-    /** Accumulation buffer for fragmented inbound data. */
     private final NetworkBuffer readBuffer =
             NetworkBuffer.resizableBuffer(ServerFlag.POOLED_BUFFER_SIZE, MinecraftServer.process());
 
-    /** Outbound packet queue — filled by any thread, drained by the Netty I/O thread. */
     private final MessagePassingQueue<SendablePacket> packetQueue =
             ConcurrentMessageQueues.mpscUnboundedArrayQueue(1024);
 
     private final AtomicLong sentPacketCounter = new AtomicLong();
-    /**
-     * Compression begins after the packet at index {@code compressionStart} has
-     * been sent. {@code Long.MAX_VALUE} means compression is not yet enabled.
-     */
+    // Index where compression starts, linked to `sentPacketCounter`
+    // Used instead of a simple boolean so we can get proper timing for serialization
     private volatile long compressionStart = Long.MAX_VALUE;
 
     private final ListenerHandle<PlayerPacketOutEvent> outgoing =
             EventDispatcher.getHandle(PlayerPacketOutEvent.class);
 
-    /** The Netty handler that bridges channel events into this connection. */
     private final ConnectionHandler handler = new ConnectionHandler();
 
     public PlayerSocketConnection(Channel channel,
@@ -166,7 +152,6 @@ public class PlayerSocketConnection extends PlayerConnection {
             disconnect();
             return;
         }
-
         switch (result) {
             case PacketReading.Result.Success<ClientPacket> success -> {
                 for (PacketReading.ParsedPacket<ClientPacket> parsed : success.packets()) {
@@ -176,6 +161,7 @@ public class PlayerSocketConnection extends PlayerConnection {
                             MinecraftServer.getPacketListenerManager()
                                     .processClientPacket(packet, this);
                         } else {
+                            // To be processed during the next player tick
                             final Player player = getPlayer();
                             assert player != null;
                             player.addPacketToQueue(packet);
@@ -184,6 +170,7 @@ public class PlayerSocketConnection extends PlayerConnection {
                         MinecraftServer.getExceptionManager().handleException(e);
                     }
                 }
+                // Compact in case of incomplete read
                 readBuffer.compact();
             }
             case PacketReading.Result.Empty<ClientPacket> ignored -> { /* nothing yet */ }
@@ -253,59 +240,59 @@ public class PlayerSocketConnection extends PlayerConnection {
     private boolean writePacketSync(NetworkBuffer buffer, SendablePacket packet, boolean compressed) {
         final Player player = getPlayer();
         final ConnectionState state = getServerState();
-
         if (player != null) {
             // Outgoing event
             if (outgoing.hasListener()) {
-                final ServerPacket sp = SendablePacket.extractServerPacket(state, packet);
-                if (sp != null) {
-                    final PlayerPacketOutEvent event = new PlayerPacketOutEvent(player, sp);
+                final ServerPacket serverPacket = SendablePacket.extractServerPacket(state, packet);
+                if (serverPacket != null) { // Events are not called for buffered packets
+                    PlayerPacketOutEvent event = new PlayerPacketOutEvent(player, serverPacket);
                     outgoing.call(event);
                     if (event.isCancelled()) return true;
                 }
             }
-            // Adventure translation
-            if (MinestomAdventure.AUTOMATIC_COMPONENT_TRANSLATION
-                    && packet instanceof ServerPacket.ComponentHolding ch) {
-                packet = ch.copyWithOperator(component ->
-                        MinestomAdventure.COMPONENT_TRANSLATOR.apply(component,
-                                Objects.requireNonNullElseGet(player.getLocale(),
-                                        MinestomAdventure::getDefaultLocale)));
+            // Translation
+            if (ServerFlag.AUTOMATIC_COMPONENT_TRANSLATION && packet instanceof ServerPacket.ComponentHolding translatablePacket) {
+                packet = translatablePacket.copyWithOperator(component ->
+                        MinestomAdventure.COMPONENT_TRANSLATOR.apply(component, Objects.requireNonNullElseGet(player.getLocale(), MinestomAdventure::getDefaultLocale)));
             }
         }
-
+        // Write packet
         final long start = buffer.writeIndex();
-        final int threshold = compressed ? MinecraftServer.getCompressionThreshold() : 0;
+        final int compressionThreshold = compressed ? MinecraftServer.getCompressionThreshold() : 0;
         try {
             return switch (packet) {
-                case ServerPacket sp -> {
-                    final var next = PacketVanilla.nextServerState(sp, state);
-                    if (next != state) setServerState(next);
-                    PacketWriting.writeFramedPacket(buffer, state, sp, threshold);
+                case ServerPacket serverPacket -> {
+                    var nextState = PacketVanilla.nextServerState(serverPacket, state);
+                    if (nextState != state) setServerState(nextState);
+
+                    PacketWriting.writeFramedPacket(buffer, state, serverPacket, compressionThreshold);
                     yield true;
                 }
-                case FramedPacket fp -> {
-                    final NetworkBuffer body = fp.body();
+                case FramedPacket framedPacket -> {
+                    final NetworkBuffer body = framedPacket.body();
                     yield writeBuffer(buffer, body, 0, body.capacity());
                 }
-                case CachedPacket cp -> {
-                    final NetworkBuffer body = cp.body(state);
+                case CachedPacket cachedPacket -> {
+                    final NetworkBuffer body = cachedPacket.body(state);
                     if (body != null) {
                         yield writeBuffer(buffer, body, 0, body.capacity());
                     } else {
-                        PacketWriting.writeFramedPacket(buffer, state, cp.packet(state), threshold);
+                        PacketWriting.writeFramedPacket(buffer, state, cachedPacket.packet(state), compressionThreshold);
                         yield true;
                     }
                 }
-                case LazyPacket lp -> {
-                    PacketWriting.writeFramedPacket(buffer, state, lp.packet(), threshold);
+                case LazyPacket lazyPacket -> {
+                    PacketWriting.writeFramedPacket(buffer, state, lazyPacket.packet(), compressionThreshold);
                     yield true;
                 }
-                case BufferedPacket bp -> {
-                    yield writeBuffer(buffer, bp.buffer(), bp.index(), bp.length());
+                case BufferedPacket bufferedPacket -> {
+                    final NetworkBuffer rawBuffer = bufferedPacket.buffer();
+                    final long index = bufferedPacket.index();
+                    final long length = bufferedPacket.length();
+                    yield writeBuffer(buffer, rawBuffer, index, length);
                 }
             };
-        } catch (IndexOutOfBoundsException e) {
+        } catch (IndexOutOfBoundsException exception) {
             buffer.writeIndex(start);
             return false;
         }
@@ -365,33 +352,61 @@ public class PlayerSocketConnection extends PlayerConnection {
         this.loginUsername = loginUsername;
     }
 
-    @Override public @Nullable String getServerAddress()  { return serverAddress; }
-    @Override public int            getServerPort()        { return serverPort; }
-    @Override public int            getProtocolVersion()   { return protocolVersion; }
-
-    public void refreshServerInformation(@Nullable String serverAddress,
-                                         int serverPort,
-                                         int protocolVersion) {
-        this.serverAddress   = serverAddress;
-        this.serverPort      = serverPort;
-        this.protocolVersion = protocolVersion;
-    }
-
-    public byte[] getNonce()            { return nonce; }
-    public void   setNonce(byte[] n)    { this.nonce = n; }
-
+    /**
+     * Gets the server address that the client used to connect.
+     * <p>
+     * WARNING: it is given by the client, it is possible for it to be wrong.
+     *
+     * @return the server address used
+     */
     @Override
-    public void disconnect() {
-        super.disconnect();
-        channel.close();
+    public @Nullable String getServerAddress() {
+        return serverAddress;
     }
 
     /**
-     * Bridges Netty channel lifecycle events into {@link PlayerSocketConnection}.
-     * This handler is added to the Netty pipeline by {@code Server} and must
-     * be annotated {@code @ChannelHandler.Sharable} only if shared — here each
-     * connection gets its own instance.
+     * Gets the server port that the client used to connect.
+     * <p>
+     * WARNING: it is given by the client, it is possible for it to be wrong.
+     *
+     * @return the server port used
      */
+    @Override
+    public int getServerPort() {
+        return serverPort;
+    }
+
+    /**
+     * Gets the protocol version of a client.
+     *
+     * @return protocol version of client.
+     */
+    @Override
+    public int getProtocolVersion() {
+        return protocolVersion;
+    }
+
+    /**
+     * Used in {@link ClientHandshakePacket} to change the internal fields.
+     *
+     * @param serverAddress   the server address which the client used
+     * @param serverPort      the server port which the client used
+     * @param protocolVersion the protocol version which the client used
+     */
+    public void refreshServerInformation(@Nullable String serverAddress, int serverPort, int protocolVersion) {
+        this.serverAddress = serverAddress;
+        this.serverPort = serverPort;
+        this.protocolVersion = protocolVersion;
+    }
+
+    public byte[] getNonce() {
+        return nonce;
+    }
+
+    public void setNonce(byte[] nonce) {
+        this.nonce = nonce;
+    }
+
     public final class ConnectionHandler extends ChannelDuplexHandler {
 
         @Override
@@ -441,6 +456,11 @@ public class PlayerSocketConnection extends PlayerConnection {
                 ctx.close(promise);
             }
         }
+    }
+
+    @Override
+    public void disconnect() {
+        super.disconnect();
     }
 
     record EncryptionContext(Cipher encrypt, Cipher decrypt) {}
