@@ -327,7 +327,7 @@ final class NetworkBufferImpl implements NetworkBuffer {
     }
 
     @Override
-    public long decompress(long start, long length, NetworkBuffer output) throws DataFormatException {
+    public long decompress(long start, long length, NetworkBuffer output) {
         assertDummy();
         impl(output).assertReadOnly();
 
@@ -350,6 +350,8 @@ final class NetworkBufferImpl implements NetworkBuffer {
             }
             output.advanceWrite(total);
             return total;
+        } catch (DataFormatException e) {
+            throw new RuntimeException(e);
         } finally {
             inflater.reset();
             CompressionHolder.INFLATER_POOL.add(inflater);
