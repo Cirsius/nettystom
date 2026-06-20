@@ -2,8 +2,7 @@ metadata.format.version = "1.1"
 
 [versions]
 
-# Netty — 4.1.135.Final: security patches over 4.1.132/134 (CVE fixes in
-# netty-codec-http2, netty-handler, netty-resolver-dns, netty-codec-haproxy, …)
+# Netty
 netty = "4.1.135.Final"
 
 # Important dependencies
