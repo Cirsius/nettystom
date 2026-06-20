@@ -9,8 +9,6 @@ import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.channel.unix.DomainSocketAddress;
-import io.netty.channel.unix.UnixChannel;
-import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import net.minestom.server.MinecraftServer;
 import net.minestom.server.ServerFlag;
 import net.minestom.server.network.packet.PacketParser;
@@ -21,6 +19,7 @@ import org.jetbrains.annotations.ApiStatus;
 
 import java.io.IOException;
 import java.net.*;
+import java.nio.file.Files;
 
 public final class Server {
 
@@ -99,7 +98,6 @@ public final class Server {
         if (socketAddress instanceof InetSocketAddress inet) {
             future = bootstrap.bind(inet);
         } else if (socketAddress instanceof UnixDomainSocketAddress unix) {
-            // Netty uses its own DomainSocketAddress type
             future = bootstrap.bind(new DomainSocketAddress(unix.getPath().toString()));
         } else {
             throw new IllegalStateException("Unsupported address type: " + socketAddress);
@@ -112,7 +110,6 @@ public final class Server {
             throw new RuntimeException("Server bind interrupted", e);
         }
 
-        // If port was 0 (OS-assigned), read it back
         if (socketAddress instanceof InetSocketAddress && port == 0) {
             port = ((InetSocketAddress) serverChannel.localAddress()).getPort();
         }
@@ -129,6 +126,14 @@ public final class Server {
         }
         if (bossGroup   != null) bossGroup.shutdownGracefully();
         if (workerGroup != null) workerGroup.shutdownGracefully();
+
+        if (socketAddress instanceof UnixDomainSocketAddress unix) {
+            try {
+                Files.deleteIfExists(unix.getPath());
+            } catch (IOException e) {
+                MinecraftServer.getExceptionManager().handleException(e);
+            }
+        }
     }
 
 

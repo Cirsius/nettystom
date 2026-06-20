@@ -56,7 +56,6 @@ import java.util.zip.DataFormatException;
 
 @ApiStatus.Internal
 public class PlayerSocketConnection extends PlayerConnection {
-
     private static final Set<Class<? extends ClientPacket>> IMMEDIATE_PROCESS_PACKETS = Set.of(
             ClientHandshakePacket.class, // First received packet
             ClientCookieResponsePacket.class,
@@ -75,14 +74,14 @@ public class PlayerSocketConnection extends PlayerConnection {
     private SocketAddress remoteAddress;
     private final PacketParser<ClientPacket> packetParser;
 
-    /** Cipher context for AES-CFB8 Mojang encryption (nullable until login). */
-    private volatile EncryptionContext encryptionContext;
+    //Could be null. Only used for Mojang Auth
+    private volatile @Nullable EncryptionContext encryptionContext;
     private byte[] nonce = new byte[4];
 
     // Data from client packets
-    private String loginUsername;
-    private GameProfile gameProfile;
-    private String serverAddress;
+    private @Nullable String loginUsername;
+    private @Nullable GameProfile gameProfile;
+    private @Nullable String serverAddress;
     private int serverPort;
     private int protocolVersion;
 
@@ -437,6 +436,8 @@ public class PlayerSocketConnection extends PlayerConnection {
             }
         }
 
+        private @Nullable NetworkBuffer writeLeftover = null;
+
         @Override
         public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
             final boolean expected =
@@ -463,5 +464,6 @@ public class PlayerSocketConnection extends PlayerConnection {
         super.disconnect();
     }
 
-    record EncryptionContext(Cipher encrypt, Cipher decrypt) {}
+    record EncryptionContext(Cipher encrypt, Cipher decrypt) {
+    }
 }
