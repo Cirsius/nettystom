@@ -3,7 +3,7 @@ metadata.format.version = "1.1"
 [versions]
 
 # Netty
-netty = "4.1.132.Final"
+netty = "4.1.135.Final"
 
 # Important dependencies
 data = "26.1.2-rv1"
