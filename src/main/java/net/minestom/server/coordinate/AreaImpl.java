@@ -2,7 +2,12 @@ package net.minestom.server.coordinate;
 
 import net.minestom.server.utils.validate.Check;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Iterator;
+import java.util.List;
+import java.util.NoSuchElementException;
+import java.util.Objects;
 
 import static net.minestom.server.coordinate.CoordConversion.SECTION_BOUND;
 import static net.minestom.server.coordinate.CoordConversion.SECTION_SIZE;
@@ -600,7 +605,7 @@ final class AreaImpl {
         final boolean adjacentX = Math.abs(nextX - endX) == 1;
         final boolean adjacentY = Math.abs(nextY - endY) == 1;
         final boolean adjacentZ = Math.abs(nextZ - endZ) == 1;
-        return sameY && sameZ && adjacentX || sameX && sameZ && adjacentY || sameX && sameY && adjacentZ;
+        return (sameY && sameZ && adjacentX) || (sameX && sameZ && adjacentY) || (sameX && sameY && adjacentZ);
     }
 
     private static boolean sectionInsideSphere(int sectionMinX, int sectionMinY, int sectionMinZ,
@@ -613,7 +618,7 @@ final class AreaImpl {
     }
 
     private static long floorSqrt(long value) {
-        long sqrt = (long) Math.sqrt(value);
+        long sqrt = (long) Math.sqrt((double) value);
         // Math.sqrt may round up to an exact integer for value > 2^52; correct by one if so.
         if (sqrt > 0 && sqrt * sqrt > value) sqrt--;
         return sqrt;

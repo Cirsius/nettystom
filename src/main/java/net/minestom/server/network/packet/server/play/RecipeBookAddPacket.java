@@ -10,7 +10,6 @@ import net.minestom.server.recipe.display.RecipeDisplay;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
 import java.util.function.UnaryOperator;
 
@@ -66,7 +65,7 @@ public record RecipeBookAddPacket(List<Entry> entries, boolean replace) implemen
     }
 
     @Override
-    public Collection<Component> components() {
+    public List<Component> components() {
         final var components = new ArrayList<Component>();
         for (Entry entry : entries)
             components.addAll(entry.display.components());

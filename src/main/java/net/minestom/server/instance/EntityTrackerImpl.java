@@ -18,7 +18,14 @@ import org.slf4j.LoggerFactory;
 import space.vectrix.flare.fastutil.Int2ObjectSyncMap;
 import space.vectrix.flare.fastutil.Long2ObjectSyncMap;
 
-import java.util.*;
+import java.util.AbstractSet;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -35,7 +42,8 @@ final class EntityTrackerImpl implements EntityTracker {
 
     // Store all data associated to a Target
     // The array index is the Target enum ordinal
-    final TargetEntry<Entity>[] targetEntries = EntityTracker.Target.TARGETS.stream().map((Function<Target<?>, TargetEntry>) TargetEntry::new).toArray(TargetEntry[]::new);
+    @SuppressWarnings("unchecked")
+    final TargetEntry<Entity>[] targetEntries = EntityTracker.Target.TARGETS.stream().map((Function<Target<?>, TargetEntry<?>>) TargetEntry::new).toArray(TargetEntry[]::new);
 
     private final Int2ObjectSyncMap<EntityTrackerEntry> entriesByEntityId = Int2ObjectSyncMap.hashmap();
     private final Map<UUID, EntityTrackerEntry> entriesByEntityUuid = new ConcurrentHashMap<>();
@@ -138,9 +146,9 @@ final class EntityTrackerImpl implements EntityTracker {
     }
 
     @Override
-    public @Unmodifiable <T extends Entity> Collection<T> chunkEntities(int chunkX, int chunkZ, Target<T> target) {
+    public @Unmodifiable <T extends Entity> List<T> chunkEntities(int chunkX, int chunkZ, Target<T> target) {
         final TargetEntry<Entity> entry = targetEntries[target.ordinal()];
-        //noinspection unchecked
+        @SuppressWarnings("unchecked")
         var chunkEntities = (List<T>) entry.chunkEntities(CoordConversion.chunkIndex(chunkX, chunkZ));
         return Collections.unmodifiableList(chunkEntities);
     }
@@ -150,14 +158,14 @@ final class EntityTrackerImpl implements EntityTracker {
         final Long2ObjectSyncMap<List<Entity>> entities = targetEntries[target.ordinal()].chunkEntities;
         if (chunkRange == 0) {
             // Single chunk
-            final var chunkEntities = (List<T>) entities.get(CoordConversion.chunkIndex(point));
+            @SuppressWarnings("unchecked") final var chunkEntities = (List<T>) entities.get(CoordConversion.chunkIndex(point));
             if (chunkEntities != null && !chunkEntities.isEmpty()) {
                 chunkEntities.forEach(query);
             }
         } else {
             // Multiple chunks
             ChunkRange.chunksInRange(point, chunkRange, (chunkX, chunkZ) -> {
-                final var chunkEntities = (List<T>) entities.get(CoordConversion.chunkIndex(chunkX, chunkZ));
+                @SuppressWarnings("unchecked") final var chunkEntities = (List<T>) entities.get(CoordConversion.chunkIndex(chunkX, chunkZ));
                 if (chunkEntities == null || chunkEntities.isEmpty()) return;
                 chunkEntities.forEach(query);
             });
@@ -174,32 +182,33 @@ final class EntityTrackerImpl implements EntityTracker {
         final double squaredRange = range * range;
         if (minChunkX == maxChunkX && minChunkZ == maxChunkZ) {
             // Single chunk
-            final var chunkEntities = (List<T>) entities.get(CoordConversion.chunkIndex(point));
-            if (chunkEntities != null && !chunkEntities.isEmpty()) {
-                chunkEntities.forEach(entity -> {
-                    final Point position = entriesByEntityId.get(entity.getEntityId()).getLastPosition();
-                    if (point.distanceSquared(position) <= squaredRange) query.accept(entity);
-                });
-            }
+            @SuppressWarnings("unchecked") final var chunkEntities = (List<T>) entities.get(CoordConversion.chunkIndex(point));
+            if (chunkEntities == null || chunkEntities.isEmpty()) return;
+            chunkEntities.forEach(entity -> {
+                EntityTrackerEntry trackerEntry = entriesByEntityId.get(entity.getEntityId());
+                if (trackerEntry == null) return;
+                final Point position = trackerEntry.getLastPosition();
+                if (position != null && point.distanceSquared(position) <= squaredRange) query.accept(entity);
+            });
         } else {
             // Multiple chunks
             final int chunkRange = (int) (range / Chunk.CHUNK_SECTION_SIZE) + 1;
             ChunkRange.chunksInRange(point, chunkRange, (chunkX, chunkZ) -> {
-                final var chunkEntities = (List<T>) entities.get(CoordConversion.chunkIndex(chunkX, chunkZ));
+                @SuppressWarnings("unchecked") final var chunkEntities = (List<T>) entities.get(CoordConversion.chunkIndex(chunkX, chunkZ));
                 if (chunkEntities == null || chunkEntities.isEmpty()) return;
                 chunkEntities.forEach(entity -> {
-                    final Point position = entriesByEntityId.get(entity.getEntityId()).getLastPosition();
-                    if (point.distanceSquared(position) <= squaredRange) {
-                        query.accept(entity);
-                    }
+                    EntityTrackerEntry trackerEntry = entriesByEntityId.get(entity.getEntityId());
+                    if (trackerEntry == null) return;
+                    final Point position = trackerEntry.getLastPosition();
+                    if (position != null && point.distanceSquared(position) <= squaredRange) query.accept(entity);
                 });
             });
         }
     }
 
     @Override
+    @SuppressWarnings("unchecked")
     public @UnmodifiableView <T extends Entity> Set<T> entities(Target<T> target) {
-        //noinspection unchecked
         return (Set<T>) targetEntries[target.ordinal()].entitiesView;
     }
 
@@ -218,20 +227,21 @@ final class EntityTrackerImpl implements EntityTracker {
             this.lastPosition = lastPosition;
         }
 
-        public Entity getEntity() {
+        Entity getEntity() {
             return entity;
         }
 
         @Nullable
-        public Point getLastPosition() {
+        Point getLastPosition() {
             return lastPosition;
         }
 
-        public void setLastPosition(Point lastPosition) {
+        void setLastPosition(Point lastPosition) {
             this.lastPosition = lastPosition;
         }
     }
 
+    @SuppressWarnings("unchecked")
     private <T extends Entity> void difference(Point oldPoint, Point newPoint,
                                                Target<T> target, Update<T> update) {
         final TargetEntry<Entity> entry = targetEntries[target.ordinal()];
@@ -273,7 +283,7 @@ final class EntityTrackerImpl implements EntityTracker {
         }
 
         List<T> chunkEntities(long index) {
-            return chunkEntities.computeIfAbsent(index, i -> (List<T>) new CopyOnWriteArrayList());
+            return chunkEntities.computeIfAbsent(index, _ -> new CopyOnWriteArrayList<>());
         }
 
         void addToChunk(long index, T entity) {

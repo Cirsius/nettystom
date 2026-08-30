@@ -8,7 +8,7 @@ import net.minestom.server.network.player.ResolvableProfile;
 import org.jetbrains.annotations.Nullable;
 
 public class MannequinMeta extends AvatarMeta {
-    public MannequinMeta(Entity entity, MetadataHolder metadata) {
+    public MannequinMeta(@Nullable Entity entity, MetadataHolder metadata) {
         super(entity, metadata);
     }
 
@@ -93,7 +93,7 @@ public class MannequinMeta extends AvatarMeta {
 
     @Override
     public void setRightLegEnabled(boolean value) {
-        metadata.get(MetadataDef.Mannequin.IS_RIGHT_PANTS_LEG_ENABLED);
+        metadata.set(MetadataDef.Mannequin.IS_RIGHT_PANTS_LEG_ENABLED, value);
     }
 
     @Override

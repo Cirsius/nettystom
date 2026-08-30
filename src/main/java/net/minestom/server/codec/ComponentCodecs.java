@@ -3,10 +3,22 @@ package net.minestom.server.codec;
 import net.kyori.adventure.key.Key;
 import net.kyori.adventure.nbt.BinaryTag;
 import net.kyori.adventure.nbt.CompoundBinaryTag;
-import net.kyori.adventure.text.*;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.KeybindComponent;
+import net.kyori.adventure.text.NBTComponent;
+import net.kyori.adventure.text.ObjectComponent;
+import net.kyori.adventure.text.ScoreComponent;
+import net.kyori.adventure.text.SelectorComponent;
+import net.kyori.adventure.text.TextComponent;
+import net.kyori.adventure.text.TranslatableComponent;
+import net.kyori.adventure.text.TranslationArgument;
 import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.event.HoverEvent;
-import net.kyori.adventure.text.format.*;
+import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.format.ShadowColor;
+import net.kyori.adventure.text.format.Style;
+import net.kyori.adventure.text.format.TextColor;
+import net.kyori.adventure.text.format.TextDecoration;
 import net.kyori.adventure.text.object.ObjectContents;
 import net.kyori.adventure.text.object.PlayerHeadObjectContents;
 import net.kyori.adventure.text.object.SpriteObjectContents;
@@ -384,9 +396,9 @@ public final class ComponentCodecs {
                 };
 
                 return baseResult
-                        .map(ignored -> childrenCodec.encodeToMap(coder, value.children(), map))
-                        .map(ignored -> STYLE.encodeToMap(coder, value.style(), map))
-                        .mapResult(ignored -> map.build());
+                        .map(_ -> childrenCodec.encodeToMap(coder, value.children(), map))
+                        .map(_ -> STYLE.encodeToMap(coder, value.style(), map))
+                        .mapResult(_ -> map.build());
             }
         };
     });

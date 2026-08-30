@@ -17,7 +17,12 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import static net.minestom.server.network.NetworkBuffer.*;
+import static net.minestom.server.network.NetworkBuffer.BYTE;
+import static net.minestom.server.network.NetworkBuffer.BYTE_ARRAY;
+import static net.minestom.server.network.NetworkBuffer.LONG_ARRAY;
+import static net.minestom.server.network.NetworkBuffer.NBT;
+import static net.minestom.server.network.NetworkBuffer.SHORT;
+import static net.minestom.server.network.NetworkBuffer.VAR_INT;
 
 public record ChunkData(Map<Heightmap.Type, long[]> heightmaps, byte[] data,
                         Map<Integer, Block> blockEntities) {
@@ -26,7 +31,7 @@ public record ChunkData(Map<Heightmap.Type, long[]> heightmaps, byte[] data,
         data = data.clone();
         blockEntities = blockEntities.entrySet()
                 .stream()
-                .filter((entry) -> entry.getValue().registry().isBlockEntity())
+                .filter((entry) -> entry.getValue().blockEntityType() != null)
                 .collect(Collectors.toUnmodifiableMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
@@ -45,13 +50,12 @@ public record ChunkData(Map<Heightmap.Type, long[]> heightmaps, byte[] data,
             for (var entry : value.blockEntities.entrySet()) {
                 final int index = entry.getKey();
                 final Block block = entry.getValue();
-                final var registry = block.registry();
 
                 final Point point = CoordConversion.chunkBlockIndexGetGlobal(index, 0, 0);
-                buffer.write(BYTE, (byte) ((point.blockX() & 15) << 4 | point.blockZ() & 15)); // xz
+                buffer.write(BYTE, (byte) (((point.blockX() & 15) << 4) | (point.blockZ() & 15))); // xz
                 buffer.write(SHORT, (short) point.blockY()); // y
 
-                buffer.write(BlockEntityType.NETWORK_TYPE, registry.blockEntityType());
+                buffer.write(BlockEntityType.NETWORK_TYPE, block.blockEntityType());
                 final CompoundBinaryTag nbt = BlockUtils.extractClientNbt(block);
                 assert nbt != null;
                 buffer.write(NBT, nbt); // block nbt

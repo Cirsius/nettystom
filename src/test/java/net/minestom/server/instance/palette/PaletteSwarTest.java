@@ -2,9 +2,12 @@ package net.minestom.server.instance.palette;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.Arrays;
 import java.util.Random;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 /// Cross-checks the SWAR lane helpers in {@link Palettes} against a naive per-lane reference
 /// across every supported bit width and many sizes (including partial final longs).
@@ -81,7 +84,7 @@ public class PaletteSwarTest {
 
             final int fillValue = range - 1;
             final int[] full = new int[size];
-            java.util.Arrays.fill(full, fillValue);
+            Arrays.fill(full, fillValue);
             final long[] packedFull = Palettes.pack(full, bits);
             assertEquals(size, Palettes.countEquals(bits, packedFull, size, fillValue), "all-set bits=" + bits);
             assertEquals(0, Palettes.countEquals(bits, packedFull, size, 0), "all-set zero count bits=" + bits);

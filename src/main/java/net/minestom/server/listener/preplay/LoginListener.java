@@ -22,6 +22,7 @@ import net.minestom.server.network.player.PlayerConnection;
 import net.minestom.server.network.player.PlayerSocketConnection;
 import net.minestom.server.network.plugin.LoginPlugin;
 import net.minestom.server.network.plugin.LoginPluginMessageProcessor;
+import net.minestom.server.utils.StringUtils;
 import net.minestom.server.utils.mojang.MojangUtils;
 
 import javax.crypto.SecretKey;
@@ -45,13 +46,18 @@ public final class LoginListener {
 
     private static final Component ALREADY_CONNECTED = Component.text("You are already on this server", NamedTextColor.RED);
     private static final Component ERROR_DURING_LOGIN = Component.text("Error during login!", NamedTextColor.RED);
-    private static final Component ERROR_MALFORMED_USERNAME = Component.text("Error malformed username", NamedTextColor.RED);
+    private static final Component ERROR_MALFORMED_USERNAME = Component.text("Malformed username!", NamedTextColor.RED);
     private static final Component ENCRYPTION_FAILED = Component.text("Encryption failed!", NamedTextColor.RED);
     private static final Component ERROR_MOJANG_RESPONSE = Component.text("Failed to contact Mojang's Session Servers (Are they down?)", NamedTextColor.RED);
 
     public static final Component INVALID_PROXY_RESPONSE = Component.text("Invalid proxy response!", NamedTextColor.RED);
 
     public static void loginStartListener(ClientLoginStartPacket packet, PlayerConnection connection) {
+        if (!StringUtils.isValidUsername(packet.username())) {
+            connection.kick(ERROR_MALFORMED_USERNAME);
+            return;
+        }
+
         final Auth auth = MinecraftServer.process().auth();
         final boolean isSocketConnection = connection instanceof PlayerSocketConnection;
         // Proxy support (only for socket clients) and cache the login username
@@ -60,7 +66,8 @@ public final class LoginListener {
             socketConnection.UNSAFE_setLoginUsername(packet.username());
             // Velocity support
             if (auth instanceof Auth.Velocity) {
-                connection.loginPluginMessageProcessor().request(Auth.Velocity.PLAYER_INFO_CHANNEL, new byte[0])
+                // Dont block the connection so we can still read more packets
+                var _ = connection.loginPluginMessageProcessor().request(Auth.Velocity.PLAYER_INFO_CHANNEL, new byte[0])
                         .thenAccept(response -> handleVelocityProxyResponse(socketConnection, response));
                 return;
             }
@@ -180,7 +187,7 @@ public final class LoginListener {
                     MinecraftServer.getExceptionManager().handleException(e);
                     return;
                 }
-                final int port = ((java.net.InetSocketAddress) socketConnection.getRemoteAddress()).getPort();
+                final int port = ((InetSocketAddress) socketConnection.getRemoteAddress()).getPort();
                 socketAddress = new InetSocketAddress(address, port);
                 gameProfile = GameProfile.SERIALIZER.read(buffer);
             }
@@ -233,10 +240,7 @@ public final class LoginListener {
     private static void enterConfig(PlayerConnection connection, GameProfile gameProfile) {
         Thread.startVirtualThread(() -> {
             try {
-                var newGameProfile = MinecraftServer.getConnectionManager().transitionLoginToConfig(connection, gameProfile);
-                if (connection instanceof PlayerSocketConnection socketConnection) {
-                    socketConnection.UNSAFE_setProfile(newGameProfile);
-                }
+                MinecraftServer.getConnectionManager().transitionLoginToConfig(connection, gameProfile);
             } catch (Throwable t) {
                 MinecraftServer.getExceptionManager().handleException(t);
             }

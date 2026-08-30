@@ -2,7 +2,6 @@ package net.minestom.server.listener;
 
 import net.kyori.adventure.nbt.CompoundBinaryTag;
 import net.minestom.server.component.DataComponents;
-import net.minestom.server.coordinate.BlockVec;
 import net.minestom.server.coordinate.Point;
 import net.minestom.server.coordinate.Pos;
 import net.minestom.server.entity.Player;
@@ -10,7 +9,11 @@ import net.minestom.server.entity.PlayerHand;
 import net.minestom.server.entity.metadata.LivingEntityMeta;
 import net.minestom.server.event.EventDispatcher;
 import net.minestom.server.event.item.PlayerCancelItemUseEvent;
-import net.minestom.server.event.player.*;
+import net.minestom.server.event.player.PlayerCancelDiggingEvent;
+import net.minestom.server.event.player.PlayerFinishDiggingEvent;
+import net.minestom.server.event.player.PlayerStabEvent;
+import net.minestom.server.event.player.PlayerStartDiggingEvent;
+import net.minestom.server.event.player.PlayerSwapItemEvent;
 import net.minestom.server.instance.Instance;
 import net.minestom.server.instance.block.Block;
 import net.minestom.server.instance.block.BlockFace;
@@ -57,7 +60,7 @@ public final class PlayerActionListener {
             player.sendPacket(new AcknowledgeBlockChangePacket(packet.sequence()));
             if (!diggingResult.success()) {
                 // Refresh block on player screen in case it had special data (like a sign)
-                var blockEntityType = diggingResult.block().registry().blockEntityType();
+                var blockEntityType = diggingResult.block().blockEntityType();
                 if (blockEntityType != null) {
                     final CompoundBinaryTag data = BlockUtils.extractClientNbt(diggingResult.block());
                     player.sendPacketToViewersAndSelf(new BlockEntityDataPacket(blockPosition, blockEntityType, data));
@@ -186,11 +189,11 @@ public final class PlayerActionListener {
         final boolean success = instance.breakBlock(player, blockPosition, blockFace);
         final Block updatedBlock = instance.getBlock(blockPosition);
         if (!success) {
-            if (previousBlock.isSolid()) {
+            if (previousBlock.solid()) {
                 final Pos playerPosition = player.getPosition();
                 // Teleport the player back if he broke a solid block just below him
                 if (playerPosition.sub(0, 1, 0).samePoint(blockPosition)) {
-                    player.teleport(playerPosition);
+                    var _ = player.teleport(playerPosition);
                 }
             }
         }

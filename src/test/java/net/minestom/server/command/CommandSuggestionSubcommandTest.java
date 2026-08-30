@@ -1,13 +1,11 @@
 package net.minestom.server.command;
 
 import net.minestom.server.command.builder.Command;
-import net.minestom.testing.EnvTest;
 import org.junit.jupiter.api.Test;
 
-import static net.minestom.server.command.builder.arguments.ArgumentType.*;
-import static org.junit.jupiter.api.Assertions.*;
+import static net.minestom.server.command.builder.arguments.ArgumentType.Word;
+import static org.junit.jupiter.api.Assertions.fail;
 
-@EnvTest
 public class CommandSuggestionSubcommandTest {
 
     /**
@@ -24,19 +22,19 @@ public class CommandSuggestionSubcommandTest {
         var wordArg1 = Word("wordArg1");
         var wordArg2 = Word("wordArg2");
 
-        command.setDefaultExecutor((sender, context) -> {
+        command.setDefaultExecutor((_, _) -> {
             // Since baz has a default executor, we shouldn't be calling this
             fail("Command executor should not have been called");
         });
 
-        barCommand.setDefaultExecutor((sender, context) -> {
+        barCommand.setDefaultExecutor((_, _) -> {
             // This should never be called, original behaviour had this happen due to malformed command chain
             fail("Bar subcommand executor should not have been called");
         });
 
         // This is the default executor we're expecting to call
-        bazCommand.setDefaultExecutor((sender, context) -> {});
-        bazCommand.addSyntax((sender, context) -> {}, wordArg1, wordArg2);
+        bazCommand.setDefaultExecutor((_, _) -> {});
+        bazCommand.addSyntax((_, _) -> {}, wordArg1, wordArg2);
 
         command.addSubcommand(barCommand);
         command.addSubcommand(bazCommand);
@@ -62,19 +60,19 @@ public class CommandSuggestionSubcommandTest {
         var wordArg1 = Word("wordArg1");
         var wordArg2 = Word("wordArg2");
 
-        bazCommand.setDefaultExecutor((sender, context) -> {
+        bazCommand.setDefaultExecutor((_, _) -> {
             // Since the base command has a default executor, we shouldn't be calling this
             fail("Baz subcommand command executor should not have been called");
         });
 
-        barCommand.setDefaultExecutor((sender, context) -> {
+        barCommand.setDefaultExecutor((_, _) -> {
             // This should never be called, original behaviour had this happen due to malformed command chain
             fail("Bar subcommand executor should not have been called");
         });
 
         // This is the default executor we're expecting to call
-        command.setDefaultExecutor((sender, context) -> {});
-        bazCommand.addSyntax((sender, context) -> {}, wordArg1, wordArg2);
+        command.setDefaultExecutor((_, _) -> {});
+        bazCommand.addSyntax((_, _) -> {}, wordArg1, wordArg2);
 
         command.addSubcommand(barCommand);
         command.addSubcommand(bazCommand);

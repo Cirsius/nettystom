@@ -6,14 +6,20 @@ import net.kyori.adventure.text.Component;
 import net.minestom.server.codec.Codec;
 import net.minestom.server.codec.StructCodec;
 import net.minestom.server.network.NetworkBuffer;
-import net.minestom.server.registry.*;
+import net.minestom.server.registry.BuiltinRegistries;
+import net.minestom.server.registry.DynamicRegistry;
+import net.minestom.server.registry.Holder;
+import net.minestom.server.registry.HolderSet;
+import net.minestom.server.registry.Registries;
+import net.minestom.server.registry.Registry;
+import net.minestom.server.registry.RegistryKey;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
 import java.util.Map;
 
-public sealed interface Dialog extends Holder.Direct<Dialog>, DialogLike {
+public sealed interface Dialog extends Holder.Direct<Dialog>, DialogLike, Dialogs {
     Registry<StructCodec<? extends Dialog>> REGISTRY = DynamicRegistry.fromMap(
             Key.key("dialog_type"),
             Map.entry(Key.key("notice"), Notice.CODEC),
@@ -64,9 +70,18 @@ public sealed interface Dialog extends Holder.Direct<Dialog>, DialogLike {
      */
     @ApiStatus.Internal
     static DynamicRegistry<Dialog> createDefaultRegistry(Registries registries) {
-        return DynamicRegistry.createForDialogWithSelfReferentialLoadingNightmare(
-                Key.key("dialog"), REGISTRY_CODEC, RegistryData.Resource.DIALOGS, registries
-        );
+        return DynamicRegistry.create(BuiltinRegistries.DIALOG, REGISTRY_CODEC,
+                registries, (delegate, registry) -> new Registries.Delegating() {
+                    @Override
+                    public Registries registries() {
+                        return delegate;
+                    }
+
+                    @Override
+                    public DynamicRegistry<Dialog> dialog() {
+                        return registry;
+                    }
+                });
     }
 
     record Notice(DialogMetadata metadata, DialogActionButton action) implements Dialog {

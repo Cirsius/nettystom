@@ -11,12 +11,14 @@ import com.palantir.javapoet.CodeBlock;
 import com.palantir.javapoet.JavaFile;
 import com.palantir.javapoet.TypeSpec;
 import net.minestom.data.MinestomData;
+import org.jetbrains.annotations.Nullable;
 
 import javax.lang.model.SourceVersion;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Comparator;
@@ -40,11 +42,16 @@ final class Codegen {
     }
 
     InputStream resource(String name) {
-        return Objects.requireNonNull(MinestomData.resource(name), "Cannot find resource: %s".formatted(name));
+        return Objects.requireNonNull(MinestomData.resource(name + ".json"), "Cannot find resource: %s.json".formatted(name));
     }
 
     JsonObject objectResource(String name) {
         return parse(resource(name), JsonObject.class);
+    }
+
+    @Nullable JsonObject optionalObjectResource(String name) {
+        final InputStream resource = MinestomData.resource(name + ".json");
+        return resource != null ? parse(resource, JsonObject.class) : null;
     }
 
     JsonArray arrayResource(String name) {
@@ -68,6 +75,7 @@ final class Codegen {
         String constant = namespaceShort(namespace)
                 .replaceFirst("brigadier:", "")
                 .replace(".", "_")
+                .replace("/", "_")
                 .toUpperCase(Locale.ROOT);
         if (!SourceVersion.isName(constant)) {
             constant = "_" + constant;
@@ -118,7 +126,7 @@ final class Codegen {
     }
 
     private static <T> T parse(InputStream inputStream, Class<T> type) {
-        try (inputStream; Reader reader = new InputStreamReader(inputStream)) {
+        try (inputStream; Reader reader = new InputStreamReader(inputStream, StandardCharsets.UTF_8)) {
             return GSON.fromJson(reader, type);
         } catch (IOException e) {
             throw new IllegalStateException("Failed to read generator input", e);

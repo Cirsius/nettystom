@@ -7,17 +7,13 @@ on:
 permissions:
   contents: write
 
-concurrency:
-  group: build-main-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
   build:
-    name: JVM Test
+    name: JVM Check
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
       - name: Setup Java
         uses: actions/setup-java@v5
         with:
@@ -27,15 +23,15 @@ jobs:
         uses: gradle/actions/setup-gradle@v6
         with:
           cache-read-only: false
-      - name: Run JVM Tests
-        run: ./gradlew test
+      - name: Run JVM Checks
+        run: ./gradlew check
 
   javadoc:
     name: Javadoc Compilation
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
       - name: Setup Java
         uses: actions/setup-java@v5
         with:
@@ -56,7 +52,7 @@ jobs:
       metadata-updated: ${{ steps.native-run.outcome == 'failure' }}
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
       - name: Setup Java
         uses: actions/setup-java@v5
         with:
@@ -84,6 +80,8 @@ jobs:
     name: Publish Snapshot
     needs: [ build, javadoc, native-test ]
     runs-on: ubuntu-latest
+    concurrency:
+      group: publish-${{ github.ref }}
     steps:
       - name: Generate Bot Token
         if: needs.native-test.outputs.metadata-updated == 'true'
@@ -93,7 +91,7 @@ jobs:
           client-id: ${{ secrets.APP_CLIENT_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
       - name: Checkout Repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           token: ${{ needs.native-test.outputs.metadata-updated == 'true' && steps.get-bot-token.outputs.token || github.token }}
       - name: Setup Java

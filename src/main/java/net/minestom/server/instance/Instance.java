@@ -42,7 +42,11 @@ import net.minestom.server.network.packet.server.play.InitializeWorldBorderPacke
 import net.minestom.server.network.packet.server.play.SetTimePacket;
 import net.minestom.server.registry.Registries;
 import net.minestom.server.registry.RegistryKey;
-import net.minestom.server.snapshot.*;
+import net.minestom.server.snapshot.ChunkSnapshot;
+import net.minestom.server.snapshot.InstanceSnapshot;
+import net.minestom.server.snapshot.SnapshotImpl;
+import net.minestom.server.snapshot.SnapshotUpdater;
+import net.minestom.server.snapshot.Snapshotable;
 import net.minestom.server.tag.TagHandler;
 import net.minestom.server.tag.Taggable;
 import net.minestom.server.thread.ThreadDispatcher;
@@ -61,7 +65,16 @@ import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.UnmodifiableView;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.TimeUnit;
@@ -116,6 +129,7 @@ public abstract class Instance implements Block.Getter, Block.Setter, Biome.Gett
 
     private final EntityTracker entityTracker = new EntityTrackerImpl();
 
+    @SuppressWarnings("this-escape") // deliberate self registration during construction
     private final ChunkCache blockRetriever = new ChunkCache(this, null, null);
 
     protected int chunkViewDistance = ServerFlag.CHUNK_VIEW_DISTANCE;
@@ -126,7 +140,8 @@ public abstract class Instance implements Block.Getter, Block.Setter, Biome.Gett
     // instance custom data
     protected TagHandler tagHandler = TagHandler.newHandler();
     private final Scheduler scheduler = Scheduler.newScheduler();
-    private final EventNode<InstanceEvent> eventNode;
+    private final @Nullable EventNode<InstanceEvent> eventNode;
+    private final Registries registries;
 
     // the explosion supplier
     private ExplosionSupplier explosionSupplier;
@@ -148,7 +163,7 @@ public abstract class Instance implements Block.Getter, Block.Setter, Biome.Gett
      * @param dimensionType the {@link DimensionType} of the instance
      */
     public Instance(UUID uuid, RegistryKey<DimensionType> dimensionType, Key dimensionName) {
-        this(MinecraftServer.process(), uuid, dimensionType, dimensionName);
+        this(MinecraftServer.getRegistries(), uuid, dimensionType, dimensionName);
     }
 
     /**
@@ -157,7 +172,9 @@ public abstract class Instance implements Block.Getter, Block.Setter, Biome.Gett
      * @param uuid          the {@link UUID} of the instance
      * @param dimensionType the {@link DimensionType} of the instance
      */
+    @SuppressWarnings("this-escape") // deliberate self registration during construction
     public Instance(Registries registries, UUID uuid, RegistryKey<DimensionType> dimensionType, Key dimensionName) {
+        this.registries = registries;
         this.uuid = uuid;
         this.dimensionType = dimensionType;
         this.cachedDimensionType = registries.dimensionType().get(dimensionType);
@@ -178,6 +195,15 @@ public abstract class Instance implements Block.Getter, Block.Setter, Biome.Gett
             // Local nodes require a server process
             this.eventNode = null;
         }
+    }
+
+    /**
+     * Gets the registries used by this instance.
+     *
+     * @return the registries
+     */
+    public Registries registries() {
+        return registries;
     }
 
     /**
@@ -327,6 +353,8 @@ public abstract class Instance implements Block.Getter, Block.Setter, Biome.Gett
     public abstract @Nullable Chunk getChunk(int chunkX, int chunkZ);
 
     /**
+     * Checks whether the chunk at the given chunk coordinates is loaded.
+     *
      * @param chunkX the chunk X
      * @param chunkZ this chunk Z
      * @return true if the chunk is loaded
@@ -336,6 +364,8 @@ public abstract class Instance implements Block.Getter, Block.Setter, Biome.Gett
     }
 
     /**
+     * Checks whether the chunk containing the given point is loaded.
+     *
      * @param point coordinate of a block or other
      * @return true if the chunk is loaded
      */
@@ -507,6 +537,8 @@ public abstract class Instance implements Block.Getter, Block.Setter, Biome.Gett
         if (clock != null) clock.time(time);
     }
 
+    /// Sets the current time (in ticks) of the given clock.
+    ///
     /// @throws IllegalArgumentException if the clock was not registered when the instance was created.
     public void setTime(RegistryKey<WorldClock> clock, long time) {
         clock(clock).time(time);
@@ -531,9 +563,9 @@ public abstract class Instance implements Block.Getter, Block.Setter, Biome.Gett
         var entries = new HashMap<RegistryKey<WorldClock>, SetTimePacket.ClockState>();
         for (var clockInstance : this.clocks.values()) {
             entries.put(clockInstance.clock(), new SetTimePacket.ClockState(
-                clockInstance.time(),
-                clockInstance.partialTick(),
-                clockInstance.effectiveRate()
+                    clockInstance.time(),
+                    clockInstance.partialTick(),
+                    clockInstance.effectiveRate()
             ));
         }
         return new SetTimePacket(worldAge, entries);
@@ -884,7 +916,12 @@ public abstract class Instance implements Block.Getter, Block.Setter, Biome.Gett
      * @param newViewDistance the new view distance
      */
     public void viewDistance(int newViewDistance) {
+        final int oldViewDistance = this.chunkViewDistance;
+        if (oldViewDistance == newViewDistance) return;
         this.chunkViewDistance = newViewDistance;
+        for (Player player : getPlayers()) {
+            player.updateViewDistance(oldViewDistance, newViewDistance);
+        }
     }
 
     /**

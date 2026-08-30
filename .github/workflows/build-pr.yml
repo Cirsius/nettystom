@@ -9,17 +9,13 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: build-pr-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-
 jobs:
   build:
-    name: JVM Test
+    name: JVM Check
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
       - name: Setup Java
         uses: actions/setup-java@v5
         with:
@@ -29,15 +25,15 @@ jobs:
         uses: gradle/actions/setup-gradle@v6
         with:
           cache-read-only: ${{ github.event_name != 'pull_request' || github.repository_owner != github.event.pull_request.head.repo.owner.login }}
-      - name: Run JVM Tests
-        run: ./gradlew test
+      - name: Run JVM Checks
+        run: ./gradlew check
 
   javadoc:
     name: Javadoc Compilation
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
       - name: Setup Java
         uses: actions/setup-java@v5
         with:
@@ -58,7 +54,7 @@ jobs:
       metadata-updated: ${{ steps.native-run.outcome == 'failure' }}
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
       - name: Setup Java
         uses: actions/setup-java@v5
         with:
@@ -84,15 +80,16 @@ jobs:
 
   binary-compatibility:
     name: Binary Compatibility
+    needs: build
     if: |
       github.event_name != 'merge_group' &&
       !contains(github.event.pull_request.labels.*.name, 'breaking')
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Base Branch
-        uses: actions/checkout@v6
+      - name: Checkout Base Commit
+        uses: actions/checkout@v7
         with:
-          ref: ${{ github.base_ref }}
+          ref: ${{ github.event.pull_request.base.sha }}
           path: baseline-repo
       - name: Setup Java
         uses: actions/setup-java@v5
@@ -103,7 +100,7 @@ jobs:
         uses: gradle/actions/setup-gradle@v6
         with:
           cache-read-only: ${{ github.event_name != 'pull_request' || github.repository_owner != github.event.pull_request.head.repo.owner.login }}
-      - name: Build Base Branch Jars
+      - name: Build Base Commit Jars
         run: |
           cd baseline-repo
           ./gradlew jar
@@ -118,7 +115,7 @@ jobs:
             cp "$jar_path" "${{ runner.temp }}/baseline-libs/${proj_name}.jar"
           done
       - name: Checkout PR Branch
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
       - name: Check Binary Compatibility
         run: ./gradlew checkBinaryCompatibility -PbaselineJarDir="${{ runner.temp }}/baseline-libs"
 
@@ -135,9 +132,11 @@ jobs:
       needs.native-test.result == 'success' &&
       (needs.binary-compatibility.result == 'success' || needs.binary-compatibility.result == 'skipped')
     runs-on: ubuntu-latest
+    concurrency:
+      group: publish-pr-${{ github.head_ref }}
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
       - name: Setup Java
         uses: actions/setup-java@v5
         with:

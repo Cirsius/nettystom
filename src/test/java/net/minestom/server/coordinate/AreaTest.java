@@ -7,7 +7,13 @@ import java.util.List;
 import java.util.Set;
 
 import static net.minestom.testing.TestUtils.assertPoint;
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class AreaTest {
 
@@ -693,7 +699,7 @@ public class AreaTest {
     public void blockCountMatchesIteratorAllAreas() {
         for (Area area : areas()) {
             long iterated = 0;
-            for (BlockVec ignored : area) iterated++;
+            for (BlockVec _ : area) iterated++;
             assertEquals(iterated, area.blockCount(),
                     "blockCount mismatch for " + area);
         }
@@ -713,7 +719,7 @@ public class AreaTest {
     public void containsRejectsBlocksOutsideBounds() {
         for (Area area : areas()) {
             Area.Cuboid bound = area.bound();
-            BlockVec outside = bound.max().add(100, 100, 100).asBlockVec();
+            BlockVec outside = bound.max().add(100, 100, 100);
             assertFalse(area.contains(outside),
                     "contains should reject far-outside block for " + area);
         }
@@ -860,8 +866,8 @@ public class AreaTest {
     public void boundOfOffsetMatchesOffsetOfBound() {
         for (Area area : areas()) {
             Area.Cuboid expected = Area.cuboid(
-                    area.bound().min().add(2, 3, 4).asBlockVec(),
-                    area.bound().max().add(2, 3, 4).asBlockVec());
+                    area.bound().min().add(2, 3, 4),
+                    area.bound().max().add(2, 3, 4));
             Area.Cuboid actual = area.offset(2, 3, 4).bound();
             assertEquals(expected, actual, "bound mismatch after offset for " + area);
         }

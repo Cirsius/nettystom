@@ -15,18 +15,20 @@ import net.minestom.server.instance.Instance;
 import net.minestom.server.instance.InstanceManager;
 import net.minestom.server.instance.block.BlockManager;
 import net.minestom.server.listener.manager.PacketListenerManager;
-import net.minestom.server.monitoring.BenchmarkManager;
 import net.minestom.server.monitoring.EventsJFR;
 import net.minestom.server.monitoring.TickMonitor;
 import net.minestom.server.network.ConnectionManager;
 import net.minestom.server.network.packet.PacketParser;
 import net.minestom.server.network.packet.PacketVanilla;
-import net.minestom.server.network.packet.client.ClientPacket;
 import net.minestom.server.network.socket.Server;
 import net.minestom.server.recipe.RecipeManager;
 import net.minestom.server.registry.Registries;
 import net.minestom.server.scoreboard.TeamManager;
-import net.minestom.server.snapshot.*;
+import net.minestom.server.snapshot.EntitySnapshot;
+import net.minestom.server.snapshot.InstanceSnapshot;
+import net.minestom.server.snapshot.ServerSnapshot;
+import net.minestom.server.snapshot.SnapshotImpl;
+import net.minestom.server.snapshot.SnapshotUpdater;
 import net.minestom.server.thread.Acquirable;
 import net.minestom.server.thread.ThreadDispatcher;
 import net.minestom.server.thread.ThreadProvider;
@@ -63,7 +65,6 @@ final class ServerProcessImpl implements ServerProcess, Registries.Delegating {
     private final TeamManager team;
     private final GlobalEventHandler eventHandler;
     private final SchedulerManager scheduler;
-    private final BenchmarkManager benchmark;
     private final AdvancementManager advancement;
     private final BossBarManager bossBar;
     private final ClickCallbackManager clickCallbackManager;
@@ -91,7 +92,6 @@ final class ServerProcessImpl implements ServerProcess, Registries.Delegating {
         this.team = new TeamManager();
         this.eventHandler = new GlobalEventHandler();
         this.scheduler = new SchedulerManager();
-        this.benchmark = new BenchmarkManager();
         this.advancement = new AdvancementManager();
         this.bossBar = new BossBarManager();
         this.clickCallbackManager = new ClickCallbackManager();
@@ -116,6 +116,7 @@ final class ServerProcessImpl implements ServerProcess, Registries.Delegating {
     public Registries registries() {
         return registries;
     }
+
 
     @Override
     public ConnectionManager connection() {
@@ -155,11 +156,6 @@ final class ServerProcessImpl implements ServerProcess, Registries.Delegating {
     @Override
     public SchedulerManager scheduler() {
         return scheduler;
-    }
-
-    @Override
-    public BenchmarkManager benchmark() {
-        return benchmark;
     }
 
     @Override
@@ -211,10 +207,10 @@ final class ServerProcessImpl implements ServerProcess, Registries.Delegating {
         final String brand = MinecraftServer.getBrandName();
         LOGGER.info("Starting {} ({}) server.", brand, Git.version());
         switch (auth) {
-            case Auth.Offline ignored ->
+            case Auth.Offline _ ->
                     LOGGER.info("Running in offline mode. Beware that this is not secure and players can impersonate each other.");
-            case Auth.Online ignored -> LOGGER.info("Running in online mode with Mojang's authentication.");
-            case Auth.Velocity ignored -> LOGGER.info("Running in Velocity mode with modern IP forwarding.");
+            case Auth.Online _ -> LOGGER.info("Running in online mode with Mojang's authentication.");
+            case Auth.Velocity _ -> LOGGER.info("Running in Velocity mode with modern IP forwarding.");
             case Auth.Bungee bungee -> {
                 if (bungee.guard()) {
                     LOGGER.info("Running in BungeeCord mode, using legacy IP forwarding with Guard enabled.");
@@ -250,7 +246,6 @@ final class ServerProcessImpl implements ServerProcess, Registries.Delegating {
         connection.shutdown();
         server.stop();
         LOGGER.info("Shutting down all thread pools.");
-        benchmark.disable();
         dispatcher.shutdown();
         LOGGER.info("{} server stopped successfully.", brand);
     }

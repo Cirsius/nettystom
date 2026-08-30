@@ -1,5 +1,6 @@
 package net.minestom.server.network.socket;
 
+import net.minestom.testing.TestUtils;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -7,7 +8,12 @@ import java.net.InetSocketAddress;
 import java.net.UnixDomainSocketAddress;
 import java.nio.file.Files;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 public class ServerAddressTest {
@@ -17,12 +23,13 @@ public class ServerAddressTest {
         // These like to fail on github actions
         assumeTrue(System.getenv("GITHUB_ACTIONS") == null);
 
-        InetSocketAddress address = new InetSocketAddress("localhost", 25565);
+        int port = TestUtils.findFreePort();
+        InetSocketAddress address = new InetSocketAddress("localhost", port);
         var server = new Server();
         server.init(address);
         assertSame(address, server.socketAddress());
         assertEquals(address.getHostString(), server.getAddress());
-        assertEquals(address.getPort(), server.getPort());
+        assertEquals(port, server.getPort());
 
         assertDoesNotThrow(server::start);
         assertDoesNotThrow(server::stop);

@@ -5,17 +5,20 @@ import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public interface Collector<T> {
     List<T> collect();
 
+    @SuppressWarnings("unchecked")
     default <P extends T> void assertSingle(Class<P> type, Consumer<P> consumer) {
         List<T> elements = collect();
         assertEquals(1, elements.size(), "Expected 1 element, got " + elements);
         var element = elements.getFirst();
         assertInstanceOf(type, element, "Expected type " + type.getSimpleName() + ", got " + element.getClass().getSimpleName());
-        //noinspection unchecked
         consumer.accept((P) element);
     }
 

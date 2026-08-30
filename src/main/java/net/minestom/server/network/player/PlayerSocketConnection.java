@@ -3,8 +3,10 @@ package net.minestom.server.network.player;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelDuplexHandler;
+import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
+import io.netty.channel.embedded.EmbeddedChannel;
 import net.minestom.server.MinecraftServer;
 import net.minestom.server.ServerFlag;
 import net.minestom.server.adventure.MinestomAdventure;
@@ -31,7 +33,11 @@ import net.minestom.server.network.packet.client.login.ClientLoginAcknowledgedPa
 import net.minestom.server.network.packet.client.login.ClientLoginPluginResponsePacket;
 import net.minestom.server.network.packet.client.login.ClientLoginStartPacket;
 import net.minestom.server.network.packet.client.status.StatusRequestPacket;
-import net.minestom.server.network.packet.server.*;
+import net.minestom.server.network.packet.server.BufferedPacket;
+import net.minestom.server.network.packet.server.CachedPacket;
+import net.minestom.server.network.packet.server.FramedPacket;
+import net.minestom.server.network.packet.server.SendablePacket;
+import net.minestom.server.network.packet.server.ServerPacket;
 import net.minestom.server.network.packet.server.login.SetCompressionPacket;
 import net.minestom.server.utils.collection.ConcurrentMessageQueues;
 import net.minestom.server.utils.validate.Check;
@@ -41,19 +47,21 @@ import org.jetbrains.annotations.Nullable;
 
 import javax.crypto.Cipher;
 import javax.crypto.SecretKey;
-import java.io.EOFException;
 import java.io.IOException;
 import java.net.SocketAddress;
 import java.nio.channels.SocketChannel;
 import java.util.Collection;
 import java.util.Objects;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.locks.LockSupport;
 import java.util.zip.DataFormatException;
 
 
+/**
+ * Represents a socket connection.
+ * <p>
+ * It is the implementation used for all network client.
+ */
 @ApiStatus.Internal
 public class PlayerSocketConnection extends PlayerConnection {
     private static final Set<Class<? extends ClientPacket>> IMMEDIATE_PROCESS_PACKETS = Set.of(
@@ -86,7 +94,7 @@ public class PlayerSocketConnection extends PlayerConnection {
     private int protocolVersion;
 
     private final NetworkBuffer readBuffer =
-            NetworkBuffer.resizableBuffer(ServerFlag.POOLED_BUFFER_SIZE, MinecraftServer.process());
+            NetworkBuffer.resizableBuffer(ServerFlag.POOLED_BUFFER_SIZE, MinecraftServer.getRegistries());
 
     private final MessagePassingQueue<SendablePacket> packetQueue =
             ConcurrentMessageQueues.mpscUnboundedArrayQueue(1024);
@@ -110,7 +118,18 @@ public class PlayerSocketConnection extends PlayerConnection {
         this.packetParser  = packetParser;
     }
 
-    /** Returns the Netty {@link ChannelDuplexHandler} to be added to the pipeline. */
+    public PlayerSocketConnection(SocketChannel socketChannel, SocketAddress remoteAddress,
+                                  Thread readThread, Thread writeThread) {
+        this(legacyChannel(socketChannel, readThread, writeThread), remoteAddress, PacketVanilla.CLIENT_PACKET_PARSER);
+    }
+
+    private static Channel legacyChannel(SocketChannel socketChannel, Thread readThread, Thread writeThread) {
+        Objects.requireNonNull(socketChannel, "socketChannel");
+        Objects.requireNonNull(readThread, "readThread");
+        Objects.requireNonNull(writeThread, "writeThread");
+        return new EmbeddedChannel();
+    }
+
     public ConnectionHandler channelHandler() {
         return handler;
     }
@@ -118,11 +137,11 @@ public class PlayerSocketConnection extends PlayerConnection {
     private void handleRead(ByteBuf frame) {
         final NetworkBuffer readBuffer = this.readBuffer;
 
-        // Append frame bytes to our accumulation buffer
         final long writeIndexBefore = readBuffer.writeIndex();
-        readBuffer.readFromByteBuf(frame);
+        final byte[] bytes = new byte[frame.readableBytes()];
+        frame.readBytes(bytes);
+        readBuffer.write(NetworkBuffer.RAW_BYTES, bytes);
 
-        // Decrypt newly appended bytes
         final EncryptionContext ctx = this.encryptionContext;
         if (ctx != null) {
             final long written = readBuffer.writeIndex() - writeIndexBefore;
@@ -172,7 +191,7 @@ public class PlayerSocketConnection extends PlayerConnection {
                 // Compact in case of incomplete read
                 readBuffer.compact();
             }
-            case PacketReading.Result.Empty<ClientPacket> ignored -> { /* nothing yet */ }
+            case PacketReading.Result.Empty<ClientPacket> _ -> { /* nothing yet */ }
             case PacketReading.Result.Failure<ClientPacket> failure -> {
                 final long required = failure.requiredCapacity();
                 assert required > readBuffer.capacity();
@@ -193,10 +212,6 @@ public class PlayerSocketConnection extends PlayerConnection {
         channel.flush();
     }
 
-    /**
-     * Drains {@link #packetQueue} into a single Netty {@link ByteBuf} and writes
-     * it to the channel. Called exclusively from the Netty I/O thread.
-     */
     private void flushQueue() {
         if (packetQueue.isEmpty()) return;
 
@@ -208,16 +223,16 @@ public class PlayerSocketConnection extends PlayerConnection {
             return ok;
         });
 
-        // Transfer buffer contents to a Netty ByteBuf and write to channel
         final long readable = buffer.readableBytes();
         if (readable > 0) {
             final ByteBuf out = channel.alloc().buffer((int) readable);
-            buffer.writeToByteBuf(out);
+            final byte[] bytes = new byte[Math.toIntExact(readable)];
+            buffer.copyTo(buffer.readIndex(), bytes, 0, bytes.length);
+            buffer.advanceRead(readable);
+            out.writeBytes(bytes);
 
-            // Encrypt if needed
             final EncryptionContext ctx = this.encryptionContext;
             if (ctx != null && out.isReadable()) {
-                // cipher() works on the NetworkBuffer; re-apply on raw bytes
                 final byte[] raw = new byte[out.readableBytes()];
                 out.getBytes(out.readerIndex(), raw);
                 try {
@@ -230,7 +245,7 @@ public class PlayerSocketConnection extends PlayerConnection {
                 }
             }
 
-            channel.writeAndFlush(out);
+            channel.writeAndFlush(out).addListener(ChannelFutureListener.FIRE_EXCEPTION_ON_FAILURE);
         }
 
         PacketVanilla.PACKET_POOL.add(buffer);
@@ -255,7 +270,6 @@ public class PlayerSocketConnection extends PlayerConnection {
                         MinestomAdventure.COMPONENT_TRANSLATOR.apply(component, Objects.requireNonNullElseGet(player.getLocale(), MinestomAdventure::getDefaultLocale)));
             }
         }
-        // Write packet
         final long start = buffer.writeIndex();
         final int compressionThreshold = compressed ? MinecraftServer.getCompressionThreshold() : 0;
         try {
@@ -280,10 +294,6 @@ public class PlayerSocketConnection extends PlayerConnection {
                         yield true;
                     }
                 }
-                case LazyPacket lazyPacket -> {
-                    PacketWriting.writeFramedPacket(buffer, state, lazyPacket.packet(), compressionThreshold);
-                    yield true;
-                }
                 case BufferedPacket bufferedPacket -> {
                     final NetworkBuffer rawBuffer = bufferedPacket.buffer();
                     final long index = bufferedPacket.index();
@@ -291,13 +301,13 @@ public class PlayerSocketConnection extends PlayerConnection {
                     yield writeBuffer(buffer, rawBuffer, index, length);
                 }
             };
-        } catch (IndexOutOfBoundsException exception) {
+        } catch (IndexOutOfBoundsException _) {
             buffer.writeIndex(start);
             return false;
         }
     }
 
-    private boolean writeBuffer(NetworkBuffer dst, NetworkBuffer src,
+    private static boolean writeBuffer(NetworkBuffer dst, NetworkBuffer src,
                                 long index, long length) {
         if (dst.writableBytes() < length) return false;
         NetworkBuffer.copy(src, index, dst, dst.writeIndex(), length);
@@ -326,6 +336,13 @@ public class PlayerSocketConnection extends PlayerConnection {
         return remoteAddress;
     }
 
+    /**
+     * Changes the internal remote address field.
+     * <p>
+     * Mostly unsafe, used internally when interacting with a proxy.
+     *
+     * @param remoteAddress the new connection remote address
+     */
     @ApiStatus.Internal
     public void setRemoteAddress(SocketAddress remoteAddress) {
         this.remoteAddress = remoteAddress;
@@ -431,12 +448,10 @@ public class PlayerSocketConnection extends PlayerConnection {
 
             try {
                 disconnect(ctx, promise);
-            } catch (Exception e) {
-                ctx.close(promise);
+            } catch (Exception _) {
+                ctx.close(promise).addListener(ChannelFutureListener.FIRE_EXCEPTION_ON_FAILURE);
             }
         }
-
-        private @Nullable NetworkBuffer writeLeftover = null;
 
         @Override
         public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
@@ -453,8 +468,8 @@ public class PlayerSocketConnection extends PlayerConnection {
 
             try {
                 disconnect(ctx, promise);
-            } catch (Exception e) {
-                ctx.close(promise);
+            } catch (Exception _) {
+                ctx.close(promise).addListener(ChannelFutureListener.FIRE_EXCEPTION_ON_FAILURE);
             }
         }
     }

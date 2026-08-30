@@ -1,11 +1,19 @@
 package net.minestom.server.network;
 
+import org.jetbrains.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
 
-import static net.minestom.server.network.NetworkBuffer.*;
+import static net.minestom.server.network.NetworkBuffer.BOOLEAN;
+import static net.minestom.server.network.NetworkBuffer.BYTE;
+import static net.minestom.server.network.NetworkBuffer.DOUBLE;
+import static net.minestom.server.network.NetworkBuffer.FLOAT;
+import static net.minestom.server.network.NetworkBuffer.LONG;
+import static net.minestom.server.network.NetworkBuffer.SHORT;
+import static net.minestom.server.network.NetworkBuffer.STRING;
+import static net.minestom.server.network.NetworkBuffer.VAR_INT;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -71,7 +79,7 @@ public class NetworkBufferTemplateTest {
     @Test
     public void mixedTypeTemplate() {
         record Mixed(boolean flag, byte b, short s, int var, long l, float f, double d, String text,
-                     String optionalText, List<Integer> ints) {
+                     @Nullable String optionalText, List<Integer> ints) {
         }
         NetworkBuffer.Type<Mixed> mixedType = NetworkBufferTemplate.template(
                 BOOLEAN, Mixed::flag,

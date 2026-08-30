@@ -12,10 +12,8 @@ import net.minestom.server.instance.InstanceManager;
 import net.minestom.server.instance.block.BlockManager;
 import net.minestom.server.instance.block.rule.BlockPlacementRule;
 import net.minestom.server.listener.manager.PacketListenerManager;
-import net.minestom.server.monitoring.BenchmarkManager;
 import net.minestom.server.network.ConnectionManager;
 import net.minestom.server.network.packet.PacketParser;
-import net.minestom.server.network.packet.client.ClientPacket;
 import net.minestom.server.network.socket.Server;
 import net.minestom.server.recipe.RecipeManager;
 import net.minestom.server.registry.Registries;
@@ -29,6 +27,13 @@ import java.net.SocketAddress;
 
 @ApiStatus.NonExtendable
 public interface ServerProcess extends Registries, Snapshotable {
+    /**
+     * Gets the registries owned by this process.
+     *
+     * @return the process registries
+     */
+    Registries registries();
+
     Auth auth();
 
     /**
@@ -73,8 +78,6 @@ public interface ServerProcess extends Registries, Snapshotable {
      * Main scheduler ticked at the server rate.
      */
     SchedulerManager scheduler();
-
-    BenchmarkManager benchmark();
 
     /**
      * Handles registered advancements.

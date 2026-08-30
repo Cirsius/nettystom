@@ -9,7 +9,11 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.function.IntUnaryOperator;
 
-import static net.minestom.server.network.NetworkBuffer.*;
+import static net.minestom.server.network.NetworkBuffer.BYTE;
+import static net.minestom.server.network.NetworkBuffer.FixedRawLongs;
+import static net.minestom.server.network.NetworkBuffer.RAW_LONGS;
+import static net.minestom.server.network.NetworkBuffer.VAR_INT;
+import static net.minestom.server.network.NetworkBuffer.VAR_INT_ARRAY;
 
 /**
  * Palette is a data storage with three storage models used to store blocks and biomes
@@ -153,6 +157,7 @@ public sealed interface Palette permits PaletteImpl {
      * Attempts to optimize the current {@link Palette}
      * <br>
      * If plausible the only optimization will be performed is converting to a single value regardless of {@link Optimization}
+     *
      * @param focus the optimization focus
      */
     void optimize(Optimization focus);
@@ -245,7 +250,7 @@ public sealed interface Palette permits PaletteImpl {
                     if (value.hasPalette()) {
                         buffer.write(VAR_INT.list(), value.paletteToValueList);
                     }
-                    for (long l : value.values) buffer.write(LONG, l);
+                    buffer.write(RAW_LONGS, value.values);
                 }
             }
 
@@ -274,8 +279,7 @@ public sealed interface Palette permits PaletteImpl {
                         result.valueToPaletteMap.put(palette[i], i);
                     }
                 }
-                final long[] data = new long[Palettes.arrayLength(dimension, bitsPerEntry)];
-                for (int i = 0; i < data.length; i++) data[i] = buffer.read(LONG);
+                final long[] data = buffer.read(FixedRawLongs(Palettes.arrayLength(dimension, bitsPerEntry)));
                 result.values = data;
                 if (palette != null) Palettes.validateIndices(bitsPerEntry, dimension, data, palette.length);
                 result.recount();

@@ -6,7 +6,10 @@ import java.util.Random;
 
 import static net.minestom.server.coordinate.Point.EPSILON;
 import static net.minestom.server.coordinate.Pos.VIEW_EPSILON;
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class PosTest {
 
@@ -326,7 +329,7 @@ public class PosTest {
     @Test
     public void testAsPosWithView() {
         Pos pos = new Pos(1, 2, 3, 45f, 30f);
-        Pos result = pos.asPos(90f, 60f);
+        Pos result = pos.withView(90f, 60f);
         assertEquals(1, result.x());
         assertEquals(2, result.y());
         assertEquals(3, result.z());

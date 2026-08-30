@@ -3,7 +3,16 @@ package net.minestom.server.entity;
 import net.kyori.adventure.text.Component;
 import net.minestom.server.coordinate.Point;
 import net.minestom.server.coordinate.Vec;
-import net.minestom.server.entity.metadata.animal.*;
+import net.minestom.server.entity.metadata.animal.ArmadilloMeta;
+import net.minestom.server.entity.metadata.animal.ChickenSoundVariant;
+import net.minestom.server.entity.metadata.animal.ChickenVariant;
+import net.minestom.server.entity.metadata.animal.CowSoundVariant;
+import net.minestom.server.entity.metadata.animal.CowVariant;
+import net.minestom.server.entity.metadata.animal.FrogVariant;
+import net.minestom.server.entity.metadata.animal.PigSoundVariant;
+import net.minestom.server.entity.metadata.animal.PigVariant;
+import net.minestom.server.entity.metadata.animal.SnifferMeta;
+import net.minestom.server.entity.metadata.animal.ZombieNautilusVariant;
 import net.minestom.server.entity.metadata.animal.tameable.CatSoundVariant;
 import net.minestom.server.entity.metadata.animal.tameable.CatVariant;
 import net.minestom.server.entity.metadata.animal.tameable.WolfSoundVariant;
@@ -26,7 +35,9 @@ import java.util.List;
 import java.util.UUID;
 import java.util.function.Function;
 
-import static net.minestom.server.entity.MetadataDefImpl.*;
+import static net.minestom.server.entity.MetadataDefImpl.bitMask;
+import static net.minestom.server.entity.MetadataDefImpl.byteMask;
+import static net.minestom.server.entity.MetadataDefImpl.index;
 
 /**
  * List of all entity metadata.
@@ -119,9 +130,9 @@ public sealed class MetadataDef {
     }
 
     public static final class AreaEffectCloud extends MetadataDef {
-        public static final Entry<Float> RADIUS = index(0, Metadata::Float, 0.5f);
+        public static final Entry<Float> RADIUS = index(0, Metadata::Float, 3f);
         public static final Entry<Boolean> WAITING = index(1, Metadata::Boolean, false);
-        public static final Entry<Particle> PARTICLE = index(2, Metadata::Particle, Particle.EFFECT);
+        public static final Entry<Particle> PARTICLE = index(2, Metadata::Particle, Particle.ENTITY_EFFECT);
     }
 
     public static final class FishingHook extends MetadataDef {
@@ -206,7 +217,7 @@ public sealed class MetadataDef {
 
     public static final class Painting extends Hanging {
         public static final Entry<Holder<PaintingVariant>> VARIANT = index(0, Metadata::PaintingVariant,
-                                                                           PaintingVariant.KEBAB);
+                PaintingVariant.KEBAB);
     }
 
     public static final class ItemEntity extends MetadataDef {
@@ -288,7 +299,7 @@ public sealed class MetadataDef {
 
     public static final class Armadillo extends AgeableMob {
         public static final Entry<ArmadilloMeta.State> STATE = index(0, Metadata::ArmadilloState,
-                                                                     ArmadilloMeta.State.IDLE);
+                ArmadilloMeta.State.IDLE);
     }
 
     public static final class Bat extends Mob {
@@ -296,10 +307,9 @@ public sealed class MetadataDef {
         public static final Entry<Boolean> IS_HANGING = bitMask(0, (byte) 0x01, false);
     }
 
-    public static final class Dolphin extends Mob {
-        public static final Entry<Point> TREASURE_POSITION = index(0, Metadata::BlockPosition, Vec.ZERO);
-        public static final Entry<Boolean> HAS_FISH = index(1, Metadata::Boolean, false);
-        public static final Entry<Integer> MOISTURE_LEVEL = index(2, Metadata::VarInt, 2400);
+    public static final class Dolphin extends AgeableMob {
+        public static final Entry<Boolean> HAS_FISH = index(0, Metadata::Boolean, false);
+        public static final Entry<Integer> MOISTURE_LEVEL = index(1, Metadata::VarInt, 2400);
     }
 
     public static sealed class AbstractFish extends Mob {
@@ -311,7 +321,7 @@ public sealed class MetadataDef {
     }
 
     public static final class Salmon extends AbstractFish {
-        public static final Entry<Integer> SIZE = index(0, Metadata::VarInt, SalmonMeta.Size.SMALL.ordinal());
+        public static final Entry<Integer> SIZE = index(0, Metadata::VarInt, SalmonMeta.Size.MEDIUM.ordinal());
     }
 
     public static final class TropicalFish extends AbstractFish {
@@ -325,6 +335,15 @@ public sealed class MetadataDef {
     public static sealed class AgeableMob extends Mob {
         public static final Entry<Boolean> IS_BABY = index(0, Metadata::Boolean, false);
         public static final Entry<Boolean> AGE_LOCKED = index(1, Metadata::Boolean, false);
+    }
+
+    public static sealed class AbstractCubeMob extends AgeableMob {
+        public static final Entry<Integer> SIZE = index(0, Metadata::VarInt, 1); // 1 through 127
+    }
+
+    public static final class SulfurCube extends AbstractCubeMob {
+        public static final Entry<Integer> MAX_FUSE = index(0, Metadata::VarInt, -1);
+        public static final Entry<Boolean> FROM_BUCKET = index(1, Metadata::Boolean, false);
     }
 
     public static final class Sniffer extends AgeableMob {
@@ -394,8 +413,8 @@ public sealed class MetadataDef {
 
     public static final class Frog extends AgeableMob {
         public static final Entry<RegistryKey<FrogVariant>> VARIANT = index(0, Metadata::FrogVariant,
-                                                                            FrogVariant.TEMPERATE);
-        public static final Entry<@Nullable Integer> TONGUE_TARGET = index(1, Metadata::OptVarInt, 0);
+                FrogVariant.TEMPERATE);
+        public static final Entry<@Nullable Integer> TONGUE_TARGET = index(1, Metadata::OptVarInt, null);
     }
 
     public static final class Ocelot extends AgeableMob {
@@ -417,20 +436,20 @@ public sealed class MetadataDef {
 
     public static final class Chicken extends AgeableMob {
         public static final Entry<RegistryKey<ChickenVariant>> VARIANT = index(0, Metadata::ChickenVariant,
-                                                                               ChickenVariant.TEMPERATE);
+                ChickenVariant.TEMPERATE);
         public static final Entry<RegistryKey<ChickenSoundVariant>> SOUND_VARIANT = index(1, Metadata::ChickenSoundVariant, ChickenSoundVariant.CLASSIC);
     }
 
     public static final class Cow extends AgeableMob {
         public static final Entry<RegistryKey<CowVariant>> VARIANT = index(0, Metadata::CowVariant,
-                                                                           CowVariant.TEMPERATE);
+                CowVariant.TEMPERATE);
         public static final Entry<RegistryKey<CowSoundVariant>> SOUND_VARIANT = index(1, Metadata::CowSoundVariant, CowSoundVariant.CLASSIC);
     }
 
     public static final class Pig extends AgeableMob {
         public static final Entry<Integer> BOOST_TIME = index(0, Metadata::VarInt, 0);
         public static final Entry<RegistryKey<PigVariant>> VARIANT = index(1, Metadata::PigVariant,
-                                                                           PigVariant.TEMPERATE);
+                PigVariant.TEMPERATE);
         public static final Entry<RegistryKey<PigSoundVariant>> SOUND_VARIANT = index(2, Metadata::PigSoundVariant, PigSoundVariant.CLASSIC);
     }
 
@@ -493,7 +512,7 @@ public sealed class MetadataDef {
         public static final Entry<Long> ANGER_TIME = index(2, Metadata::VarLong, -1L);
         public static final Entry<RegistryKey<WolfVariant>> VARIANT = index(3, Metadata::WolfVariant, WolfVariant.PALE);
         public static final Entry<RegistryKey<WolfSoundVariant>> SOUND_VARIANT = index(4, Metadata::WolfSoundVariant,
-                                                                                       WolfSoundVariant.CLASSIC);
+                WolfSoundVariant.CLASSIC);
     }
 
     public static final class Parrot extends TameableAnimal {
@@ -514,7 +533,7 @@ public sealed class MetadataDef {
 
     public static final class Villager extends AbstractVillager {
         public static final Entry<VillagerMeta.VillagerData> VARIANT = index(0, Metadata::VillagerData,
-                                                                             VillagerMeta.VillagerData.DEFAULT);
+                VillagerMeta.VillagerData.DEFAULT);
         public static final Entry<Boolean> IS_FINALIZED = index(1, Metadata::Boolean, false);
     }
 
@@ -541,9 +560,9 @@ public sealed class MetadataDef {
 
     public static final class CopperGolem extends Mob {
         public static final Entry<CopperGolemMeta.WeatherState> WEATHER_STATE = index(0, Metadata::WeatherState,
-                                                                                      CopperGolemMeta.WeatherState.UNAFFECTED);
+                CopperGolemMeta.WeatherState.UNAFFECTED);
         public static final Entry<CopperGolemMeta.State> STATE = index(1, Metadata::CopperGolemState,
-                                                                       CopperGolemMeta.State.IDLE);
+                CopperGolemMeta.State.IDLE);
     }
 
     public static sealed class BasePiglin extends Mob {
@@ -633,7 +652,7 @@ public sealed class MetadataDef {
     public static final class ZombieVillager extends Zombie {
         public static final Entry<Boolean> IS_CONVERTING = index(0, Metadata::Boolean, false);
         public static final Entry<VillagerMeta.VillagerData> VILLAGER_DATA = index(1, Metadata::VillagerData,
-                                                                                   VillagerMeta.VillagerData.DEFAULT);
+                VillagerMeta.VillagerData.DEFAULT);
         public static final Entry<Boolean> IS_FINALIZED = index(2, Metadata::Boolean, false);
     }
 
@@ -655,8 +674,10 @@ public sealed class MetadataDef {
         public static final Entry<Integer> SIZE = index(0, Metadata::VarInt, 0);
     }
 
-    public static final class Slime extends Mob {
-        public static final Entry<Integer> SIZE = index(0, Metadata::VarInt, 1);
+    public static final class Slime extends AbstractCubeMob {
+    }
+
+    public static final class MagmaCube extends AbstractCubeMob {
     }
 
     public static final class PrimedTnt extends MetadataDef {
@@ -682,7 +703,8 @@ public sealed class MetadataDef {
 
         T defaultValue();
 
-        record Index<T extends @UnknownNullability Object>(int index, Function<T, Metadata.Entry<T>> function, T defaultValue) implements Entry<T> {
+        record Index<T extends @UnknownNullability Object>(int index, Function<T, Metadata.Entry<T>> function,
+                                                           T defaultValue) implements Entry<T> {
         }
 
         record BitMask(int index, byte bitMask, Boolean defaultValue) implements Entry<Boolean> {

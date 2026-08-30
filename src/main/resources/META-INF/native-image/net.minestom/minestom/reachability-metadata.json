@@ -75,17 +75,6 @@
       "type": "java.lang.reflect.RecordComponent"
     },
     {
-      "type": "java.nio.Buffer",
-      "fields": [
-        {
-          "name": "address"
-        },
-        {
-          "name": "capacity"
-        }
-      ]
-    },
-    {
       "type": "java.sql.Date"
     },
     {
@@ -569,6 +558,9 @@
           "name": "STRIDER"
         },
         {
+          "name": "SULFUR_CUBE"
+        },
+        {
           "name": "TADPOLE"
         },
         {
@@ -652,6 +644,9 @@
       "type": "net.minestom.server.entity.MetadataDef"
     },
     {
+      "type": "net.minestom.server.entity.MetadataDef$AbstractCubeMob"
+    },
+    {
       "type": "net.minestom.server.entity.MetadataDef$AgeableMob"
     },
     {
@@ -682,9 +677,6 @@
       "type": "net.minestom.server.entity.MetadataDef$Player"
     },
     {
-      "type": "net.minestom.server.entity.MetadataDef$Slime"
-    },
-    {
       "type": "net.minestom.server.entity.MetadataHolder",
       "fields": [
         {
@@ -699,6 +691,17 @@
           "name": "mapped"
         }
       ]
+    },
+    {
+      "type": "net.minestom.server.network.packet.server.CachedPacket",
+      "fields": [
+        {
+          "name": "packet"
+        }
+      ]
+    },
+    {
+      "type": "net.minestom.server.tag.TagRecordTest$1ArrayRecord"
     },
     {
       "type": "net.minestom.server.tag.TagRecordTest$1CompoundRecord",
@@ -716,10 +719,22 @@
       ]
     },
     {
-      "type": "net.minestom.server.tag.TagRecordTest$1Test"
+      "type": "net.minestom.server.tag.TagRecordTest$1ListRecord"
     },
     {
-      "type": "net.minestom.server.tag.TagRecordTest$2Test"
+      "type": "net.minestom.server.tag.TagUpdateTest$1Coin",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "int"
+          ]
+        },
+        {
+          "name": "coin",
+          "parameterTypes": []
+        }
+      ]
     },
     {
       "type": "net.minestom.server.tag.TagUpdateTest$1Structure",
@@ -727,7 +742,7 @@
         {
           "name": "<init>",
           "parameterTypes": [
-            "net.minestom.server.tag.TagUpdateTest$3Test"
+            "net.minestom.server.tag.TagUpdateTest$3Coin"
           ]
         },
         {
@@ -737,7 +752,7 @@
       ]
     },
     {
-      "type": "net.minestom.server.tag.TagUpdateTest$1Test",
+      "type": "net.minestom.server.tag.TagUpdateTest$2Coin",
       "methods": [
         {
           "name": "<init>",
@@ -752,7 +767,7 @@
       ]
     },
     {
-      "type": "net.minestom.server.tag.TagUpdateTest$2Test",
+      "type": "net.minestom.server.tag.TagUpdateTest$3Coin",
       "methods": [
         {
           "name": "<init>",
@@ -767,22 +782,7 @@
       ]
     },
     {
-      "type": "net.minestom.server.tag.TagUpdateTest$3Test",
-      "methods": [
-        {
-          "name": "<init>",
-          "parameterTypes": [
-            "int"
-          ]
-        },
-        {
-          "name": "coin",
-          "parameterTypes": []
-        }
-      ]
-    },
-    {
-      "type": "net.minestom.server.tag.TagUpdateTest$4Test",
+      "type": "net.minestom.server.tag.TagUpdateTest$4Coin",
       "methods": [
         {
           "name": "<init>",
@@ -846,56 +846,7 @@
       "type": "space.vectrix.flare.fastutil.Long2ObjectSyncMapImpl$ExpungingEntryImpl"
     },
     {
-      "type": "sun.management.VMManagementImpl",
-      "jniAccessible": true,
-      "fields": [
-        {
-          "name": "compTimeMonitoringSupport"
-        },
-        {
-          "name": "currentThreadCpuTimeSupport"
-        },
-        {
-          "name": "objectMonitorUsageSupport"
-        },
-        {
-          "name": "otherThreadCpuTimeSupport"
-        },
-        {
-          "name": "remoteDiagnosticCommandsSupport"
-        },
-        {
-          "name": "synchronizerUsageSupport"
-        },
-        {
-          "name": "threadAllocatedMemorySupport"
-        },
-        {
-          "name": "threadContentionMonitoringSupport"
-        }
-      ]
-    },
-    {
-      "type": "sun.misc.Unsafe",
-      "fields": [
-        {
-          "name": "theUnsafe"
-        }
-      ]
-    },
-    {
       "type": "sun.security.provider.NativePRNG",
-      "methods": [
-        {
-          "name": "<init>",
-          "parameterTypes": [
-            "java.security.SecureRandomParameters"
-          ]
-        }
-      ]
-    },
-    {
-      "type": "sun.security.provider.NativePRNG$NonBlocking",
       "methods": [
         {
           "name": "<init>",
@@ -937,9 +888,6 @@
     },
     {
       "type": "sun.text.resources.cldr.FormatData_en"
-    },
-    {
-      "type": "sun.text.resources.cldr.FormatData_en_US"
     },
     {
       "type": "sun.util.resources.cldr.CalendarData"
@@ -998,7 +946,7 @@
       "glob": "net/minestom/data/block.json"
     },
     {
-      "glob": "net/minestom/data/block_entity_types.json"
+      "glob": "net/minestom/data/block_entity_type.json"
     },
     {
       "glob": "net/minestom/data/block_sound_type.json"
@@ -1064,10 +1012,13 @@
       "glob": "net/minestom/data/jukebox_song.json"
     },
     {
+      "glob": "net/minestom/data/mob_effect.json"
+    },
+    {
       "glob": "net/minestom/data/painting_variant.json"
     },
     {
-      "glob": "net/minestom/data/particle.json"
+      "glob": "net/minestom/data/particle_type.json"
     },
     {
       "glob": "net/minestom/data/pig_sound_variant.json"
@@ -1076,13 +1027,13 @@
       "glob": "net/minestom/data/pig_variant.json"
     },
     {
-      "glob": "net/minestom/data/potion_effect.json"
-    },
-    {
-      "glob": "net/minestom/data/potion_type.json"
+      "glob": "net/minestom/data/potion.json"
     },
     {
       "glob": "net/minestom/data/sound_event.json"
+    },
+    {
+      "glob": "net/minestom/data/sulfur_cube_archetype.json"
     },
     {
       "glob": "net/minestom/data/tags/attribute.json"
@@ -1094,7 +1045,7 @@
       "glob": "net/minestom/data/tags/block.json"
     },
     {
-      "glob": "net/minestom/data/tags/block_entity_types.json"
+      "glob": "net/minestom/data/tags/block_entity_type.json"
     },
     {
       "glob": "net/minestom/data/tags/block_sound_type.json"
@@ -1160,10 +1111,13 @@
       "glob": "net/minestom/data/tags/jukebox_song.json"
     },
     {
+      "glob": "net/minestom/data/tags/mob_effect.json"
+    },
+    {
       "glob": "net/minestom/data/tags/painting_variant.json"
     },
     {
-      "glob": "net/minestom/data/tags/particle.json"
+      "glob": "net/minestom/data/tags/particle_type.json"
     },
     {
       "glob": "net/minestom/data/tags/pig_sound_variant.json"
@@ -1172,13 +1126,13 @@
       "glob": "net/minestom/data/tags/pig_variant.json"
     },
     {
-      "glob": "net/minestom/data/tags/potion_effect.json"
-    },
-    {
-      "glob": "net/minestom/data/tags/potion_type.json"
+      "glob": "net/minestom/data/tags/potion.json"
     },
     {
       "glob": "net/minestom/data/tags/sound_event.json"
+    },
+    {
+      "glob": "net/minestom/data/tags/sulfur_cube_archetype.json"
     },
     {
       "glob": "net/minestom/data/tags/timeline.json"
@@ -1239,10 +1193,6 @@
     },
     {
       "glob": "org/slf4j/impl/StaticLoggerBinder.class"
-    },
-    {
-      "module": "jdk.jfr",
-      "glob": "jdk/jfr/internal/types/metadata.bin"
     }
   ]
 }

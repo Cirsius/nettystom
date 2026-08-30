@@ -31,12 +31,12 @@ sourceSets {
 }
 
 tasks.register<Task>("determineMinecraftVersion") {
-    outputs.upToDateWhen { false } // Never cache
+    description = "Determines the Minecraft version form the data generation"
 
+    val minestomDataVersion = libs.minestomData.get().version
+    if (minestomDataVersion == null || "-" !in minestomDataVersion)
+        throw IllegalStateException("Unable to determine Minecraft version from minestomData dependency")
     doLast {
-        val minestomDataVersion = libs.minestomData.get().version
-        if (minestomDataVersion == null || "-" !in minestomDataVersion)
-            throw IllegalStateException("Unable to determine Minecraft version from minestomData dependency")
         println(minestomDataVersion.split("-")[0])
     }
 }
@@ -77,7 +77,6 @@ graalvmNative {
         metadataCopy {
             inputTaskNames.add("test")
             outputDirectories.add("src/main/resources/META-INF/native-image/net.minestom/minestom")
-            mergeWithExisting.set(true)
         }
     }
     binaries {
@@ -106,6 +105,6 @@ nmcpAggregation {
 }
 
 dependencies {
-    nmcpAggregation(rootProject)
+    nmcpAggregation(project(":"))
     nmcpAggregation(project(":testing"))
 }

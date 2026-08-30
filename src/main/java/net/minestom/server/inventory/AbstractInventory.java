@@ -19,10 +19,16 @@ import net.minestom.server.tag.TagHandler;
 import net.minestom.server.tag.Taggable;
 import net.minestom.server.utils.MathUtils;
 import net.minestom.server.utils.validate.Check;
+import org.jetbrains.annotations.Nullable;
 
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.function.UnaryOperator;
 
@@ -47,7 +53,7 @@ public sealed abstract class AbstractInventory implements InventoryClickHandler,
     protected final Set<Player> unmodifiableViewers = Collections.unmodifiableSet(viewers);
 
     // the local event node filtered to this inventory
-    private final EventNode<InventoryEvent> eventNode;
+    private final @Nullable EventNode<InventoryEvent> eventNode;
 
     protected AbstractInventory(int size) {
         this.size = size;

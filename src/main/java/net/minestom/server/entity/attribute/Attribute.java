@@ -15,8 +15,17 @@ import java.util.Collection;
 public sealed interface Attribute extends StaticProtocolObject<Attribute>, Attributes,
         Translatable permits AttributeImpl {
     NetworkBuffer.Type<Attribute> NETWORK_TYPE = NetworkBuffer.VAR_INT.transform(Attribute::fromId, Attribute::id);
-    Codec<Attribute> CODEC = Codec.STRING.transform(AttributeImpl::get, Attribute::name);
+    Codec<Attribute> CODEC = Codec.KEY.transform(Attribute::fromKey, Attribute::key);
 
+    /**
+     * Returns the legacy registry data backing this attribute.
+     *
+     * @return the legacy registry data
+     * @deprecated use the direct accessors on {@link Attribute}
+     */
+    @Deprecated(forRemoval = true)
+    @SuppressWarnings("removal")
+    @Override
     @Contract(pure = true)
     RegistryData.AttributeEntry registry();
 
@@ -30,20 +39,53 @@ public sealed interface Attribute extends StaticProtocolObject<Attribute>, Attri
         return registry().id();
     }
 
+    /**
+     * Returns this attribute's default value.
+     *
+     * @return the default value
+     */
+    @Contract(pure = true)
     default double defaultValue() {
         return registry().defaultValue();
     }
 
+    /**
+     * Returns the minimum accepted value for this attribute.
+     *
+     * @return the minimum value
+     */
+    @Contract(pure = true)
     default double minValue() {
         return registry().minValue();
     }
 
+    /**
+     * Returns the maximum accepted value for this attribute.
+     *
+     * @return the maximum value
+     */
+    @Contract(pure = true)
     default double maxValue() {
         return registry().maxValue();
     }
 
-    default boolean isSynced() {
+    /**
+     * Returns whether this attribute is synchronized with clients.
+     *
+     * @return {@code true} if this attribute is synchronized
+     */
+    @Contract(pure = true)
+    default boolean synced() {
         return registry().clientSync();
+    }
+
+    /**
+     * @deprecated use {@link #synced()}
+     */
+    @Deprecated(forRemoval = true)
+    @Contract(pure = true)
+    default boolean isSynced() {
+        return synced();
     }
 
     @Override

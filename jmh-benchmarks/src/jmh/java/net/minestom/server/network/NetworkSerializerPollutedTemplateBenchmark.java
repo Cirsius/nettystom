@@ -1,11 +1,30 @@
 package net.minestom.server.network;
 
-import org.openjdk.jmh.annotations.*;
+import org.openjdk.jmh.annotations.Benchmark;
+import org.openjdk.jmh.annotations.BenchmarkMode;
+import org.openjdk.jmh.annotations.Fork;
+import org.openjdk.jmh.annotations.Level;
+import org.openjdk.jmh.annotations.Measurement;
+import org.openjdk.jmh.annotations.Mode;
+import org.openjdk.jmh.annotations.OutputTimeUnit;
+import org.openjdk.jmh.annotations.Scope;
+import org.openjdk.jmh.annotations.Setup;
+import org.openjdk.jmh.annotations.State;
+import org.openjdk.jmh.annotations.TearDown;
+import org.openjdk.jmh.annotations.Warmup;
 import org.openjdk.jmh.infra.Blackhole;
 
 import java.util.concurrent.TimeUnit;
 
-import static net.minestom.server.network.NetworkBuffer.*;
+import static net.minestom.server.network.NetworkBuffer.BOOLEAN;
+import static net.minestom.server.network.NetworkBuffer.BYTE;
+import static net.minestom.server.network.NetworkBuffer.DOUBLE;
+import static net.minestom.server.network.NetworkBuffer.FLOAT;
+import static net.minestom.server.network.NetworkBuffer.INT;
+import static net.minestom.server.network.NetworkBuffer.SHORT;
+import static net.minestom.server.network.NetworkBuffer.STRING;
+import static net.minestom.server.network.NetworkBuffer.VAR_INT;
+import static net.minestom.server.network.NetworkBuffer.VAR_LONG;
 
 @Warmup(iterations = 5, time = 1000, timeUnit = TimeUnit.MILLISECONDS)
 @Measurement(iterations = 10, time = 1000, timeUnit = TimeUnit.MILLISECONDS)
@@ -26,7 +45,7 @@ public class NetworkSerializerPollutedTemplateBenchmark {
 
     @Setup(Level.Trial)
     public void setupTrial() {
-        polluters = new Polluter[]{
+        polluters = new Polluter<?>[]{
                 polluter(NetworkBufferTemplate.template(BOOLEAN, BooleanPacket::value, BooleanPacket::new), new BooleanPacket(true)),
                 polluter(NetworkBufferTemplate.template(BYTE, BytePacket::value, BytePacket::new), new BytePacket((byte) 1)),
                 polluter(NetworkBufferTemplate.template(SHORT, ShortPacket::value, ShortPacket::new), new ShortPacket((short) 2)),

@@ -5,7 +5,14 @@ import net.kyori.adventure.text.Component;
 import net.minestom.server.coordinate.Point;
 import net.minestom.server.coordinate.Pos;
 import net.minestom.server.coordinate.Vec;
-import net.minestom.server.entity.*;
+import net.minestom.server.entity.Entity;
+import net.minestom.server.entity.EntityStatuses;
+import net.minestom.server.entity.EntityType;
+import net.minestom.server.entity.GameMode;
+import net.minestom.server.entity.MainHand;
+import net.minestom.server.entity.MetadataDef;
+import net.minestom.server.entity.Player;
+import net.minestom.server.entity.RelativeFlags;
 import net.minestom.server.entity.damage.DamageType;
 import net.minestom.server.event.EventFilter;
 import net.minestom.server.event.player.PlayerChunkUnloadEvent;
@@ -16,7 +23,19 @@ import net.minestom.server.message.ChatMessageType;
 import net.minestom.server.network.packet.client.common.ClientSettingsPacket;
 import net.minestom.server.network.packet.client.play.ClientInputPacket;
 import net.minestom.server.network.packet.server.ServerPacket;
-import net.minestom.server.network.packet.server.play.*;
+import net.minestom.server.network.packet.server.play.DeclareCommandsPacket;
+import net.minestom.server.network.packet.server.play.EntityAttributesPacket;
+import net.minestom.server.network.packet.server.play.EntityMetaDataPacket;
+import net.minestom.server.network.packet.server.play.EntityStatusPacket;
+import net.minestom.server.network.packet.server.play.FacePlayerPacket;
+import net.minestom.server.network.packet.server.play.JoinGamePacket;
+import net.minestom.server.network.packet.server.play.PlayerAbilitiesPacket;
+import net.minestom.server.network.packet.server.play.PlayerInfoUpdatePacket;
+import net.minestom.server.network.packet.server.play.PlayerPositionAndLookPacket;
+import net.minestom.server.network.packet.server.play.ServerDifficultyPacket;
+import net.minestom.server.network.packet.server.play.SetExperiencePacket;
+import net.minestom.server.network.packet.server.play.SpawnPositionPacket;
+import net.minestom.server.network.packet.server.play.UpdateHealthPacket;
 import net.minestom.server.network.player.ClientSettings;
 import net.minestom.server.world.DimensionType;
 import net.minestom.testing.Collector;
@@ -32,7 +51,11 @@ import java.util.List;
 import java.util.Locale;
 import java.util.function.Predicate;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @EnvTest
 public class PlayerIntegrationTest {
@@ -119,7 +142,7 @@ public class PlayerIntegrationTest {
         assertEquals(ClientSettings.ParticleSetting.ALL, player.getSettings().particleSetting());
     }
 
-    private void assertAbilities(Player player, boolean isInvulnerable, boolean isFlying, boolean isAllowFlying,
+    private static void assertAbilities(Player player, boolean isInvulnerable, boolean isFlying, boolean isAllowFlying,
                                  boolean isInstantBreak) {
         assertEquals(isInvulnerable, player.isInvulnerable());
         assertEquals(isFlying, player.isFlying());
@@ -297,7 +320,7 @@ public class PlayerIntegrationTest {
 
         player.setListed(false);
 
-        var listedPackets = tracker.collect().stream().filter((packet) ->
+        long listedPackets = tracker.collect().stream().filter((packet) ->
                         packet.actions().stream().anyMatch((act) -> act == PlayerInfoUpdatePacket.Action.UPDATE_LISTED))
                 .count();
 
@@ -316,7 +339,7 @@ public class PlayerIntegrationTest {
 
         player.setListOrder(1);
 
-        var orderPackets = tracker.collect().stream().filter((packet) ->
+        long orderPackets = tracker.collect().stream().filter((packet) ->
                         packet.actions().stream().anyMatch((act) -> act == PlayerInfoUpdatePacket.Action.UPDATE_LIST_ORDER))
                 .count();
 
@@ -356,7 +379,7 @@ public class PlayerIntegrationTest {
 
         tracker = connection.trackIncoming(FacePlayerPacket.class);
         Entity entity = new Entity(EntityType.ZOMBIE);
-        entity.setInstance(player.getInstance(), new Pos(9, 9, 9));
+        entity.setInstance(player.getInstance(), new Pos(9, 9, 9)).join();
         player.lookAt(entity);
         tracker.assertSingle(FacePlayerPacket.class, packet -> assertEquals(entity.getEntityId(), packet.entityId()));
 

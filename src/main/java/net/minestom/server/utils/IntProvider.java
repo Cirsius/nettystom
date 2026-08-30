@@ -5,7 +5,6 @@ import net.minestom.server.codec.Codec;
 import net.minestom.server.codec.StructCodec;
 import net.minestom.server.registry.DynamicRegistry;
 import net.minestom.server.registry.Registry;
-import org.jetbrains.annotations.ApiStatus;
 
 import java.util.Map;
 import java.util.Random;
@@ -160,6 +159,7 @@ public sealed interface IntProvider {
                 Trapezoid::new);
 
         @Override
+        @SuppressWarnings("IdentityBinaryExpression") // two independent random draws, not a duplicated value
         public int sample(Random random) {
             if (plateau == 0 && maxInclusive == -minInclusive) {
                 return random.nextInt(maxInclusive + 1) - random.nextInt(maxInclusive + 1);

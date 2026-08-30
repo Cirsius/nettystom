@@ -6,9 +6,18 @@ import net.minestom.server.network.NetworkBufferTemplate;
 import net.minestom.server.network.packet.server.ServerPacket;
 
 import java.util.List;
+import java.util.function.Consumer;
 import java.util.function.Function;
 
-import static net.minestom.server.network.NetworkBuffer.*;
+import static net.minestom.server.network.NetworkBuffer.BYTE;
+import static net.minestom.server.network.NetworkBuffer.DOUBLE;
+import static net.minestom.server.network.NetworkBuffer.FLOAT;
+import static net.minestom.server.network.NetworkBuffer.INT;
+import static net.minestom.server.network.NetworkBuffer.LONG;
+import static net.minestom.server.network.NetworkBuffer.RAW_BYTES;
+import static net.minestom.server.network.NetworkBuffer.STRING;
+import static net.minestom.server.network.NetworkBuffer.VAR_INT;
+import static net.minestom.server.network.NetworkBuffer.VAR_INT_ARRAY;
 
 public record DeclareCommandsPacket(List<Node> nodes,
                                     int rootIndex) implements ServerPacket.Play {
@@ -38,7 +47,7 @@ public record DeclareCommandsPacket(List<Node> nodes,
         public byte[] properties; // Only for argument
         public String suggestionsType = ""; // Only if flags 0x10
 
-        public static final NetworkBuffer.Type<Node> SERIALIZER = new Type<>() {
+        public static final NetworkBuffer.Type<Node> SERIALIZER = new NetworkBuffer.Type<>() {
             @Override
             public void write(NetworkBuffer writer, Node value) {
                 writer.write(BYTE, value.flags);
@@ -68,6 +77,7 @@ public record DeclareCommandsPacket(List<Node> nodes,
                 }
             }
 
+            @Override
             public Node read(NetworkBuffer reader) {
                 Node node = new Node();
                 node.flags = reader.read(BYTE);
@@ -82,7 +92,7 @@ public record DeclareCommandsPacket(List<Node> nodes,
 
                 if (node.isArgument()) {
                     node.parser = reader.read(ArgumentParserType.NETWORK_TYPE);
-                    node.properties = node.getProperties(reader, node.parser);
+                    node.properties = Node.getProperties(reader, node.parser);
                 }
 
                 if ((node.flags & HAS_SUGGESTION_TYPE) != 0) {
@@ -92,14 +102,14 @@ public record DeclareCommandsPacket(List<Node> nodes,
             }
         };
 
-        private byte[] getProperties(NetworkBuffer reader, ArgumentParserType parser) {
-            final Function<Function<NetworkBuffer, ?>, byte[]> minMaxExtractor = (via) -> reader.extractBytes((extractor) -> {
+        private static byte[] getProperties(NetworkBuffer reader, ArgumentParserType parser) {
+            final Function<Consumer<NetworkBuffer>, byte[]> minMaxExtractor = (via) -> reader.extractBytes((extractor) -> {
                 byte flags = extractor.read(BYTE);
                 if ((flags & 0x01) == 0x01) {
-                    via.apply(extractor); // min
+                    via.accept(extractor); // min
                 }
                 if ((flags & 0x02) == 0x02) {
-                    via.apply(extractor); // max
+                    via.accept(extractor); // max
                 }
             });
             return switch (parser) {

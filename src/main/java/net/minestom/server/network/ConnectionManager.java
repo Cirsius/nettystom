@@ -33,8 +33,21 @@ import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.*;
-import java.util.concurrent.*;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArraySet;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.function.Function;
 
 /**
@@ -46,7 +59,8 @@ public final class ConnectionManager {
     private static final Component TIMEOUT_TEXT = Component.text("Timeout", NamedTextColor.RED);
     private static final Component SHUTDOWN_TEXT = Component.text("Server shutting down");
 
-    private final CachedPacket cachedTagsPacket = new CachedPacket(() -> Registries.tagsPacket(MinecraftServer.process()));
+    private final CachedPacket cachedTagsPacket =
+            new CachedPacket(() -> Registries.tagsPacket(MinecraftServer.getRegistries()));
 
     // All players once their Player object has been instantiated.
     private final Map<PlayerConnection, Player> connectionPlayerMap = new ConcurrentHashMap<>();
@@ -83,6 +97,7 @@ public final class ConnectionManager {
     /**
      * Returns an unmodifiable set containing the players currently in the play state.
      */
+    @SuppressWarnings("PreferredInterfaceType") // wider type kept for binary compatibility until the next breaking release
     public Collection<Player> getOnlinePlayers() {
         return unmodifiablePlayPlayers;
     }
@@ -90,6 +105,7 @@ public final class ConnectionManager {
     /**
      * Returns an unmodifiable set containing the players currently in the configuration state.
      */
+    @SuppressWarnings("PreferredInterfaceType") // wider type kept for binary compatibility until the next breaking release
     public Collection<Player> getConfigPlayers() {
         return unmodifiableConfigurationPlayers;
     }
@@ -209,8 +225,12 @@ public final class ConnectionManager {
             connection.kick(LoginListener.INVALID_PROXY_RESPONSE);
             throw new RuntimeException("Error getting replies for login plugin messages", t);
         }
+        // Publish the final profile before the client could possibly respond
+        if (connection instanceof PlayerSocketConnection socketConnection) {
+            socketConnection.UNSAFE_setProfile(gameProfile);
+        }
         // Send login success packet (and switch to configuration phase)
-        connection.sendPacket(new LoginSuccessPacket(gameProfile));
+        connection.sendPacket(new LoginSuccessPacket(gameProfile, new UUID(0L, 0L)));
         return gameProfile;
     }
 
@@ -250,7 +270,7 @@ public final class ConnectionManager {
             List<SelectKnownPacksPacket.Entry> knownPacks;
             try {
                 knownPacks = knownPacksFuture.get(ServerFlag.KNOWN_PACKS_RESPONSE_TIMEOUT, TimeUnit.MILLISECONDS);
-            } catch (InterruptedException | TimeoutException e) {
+            } catch (InterruptedException | TimeoutException _) {
                 LOGGER.warn("Player {} failed to respond to known packs query", player.getUsername());
                 player.getPlayerConnection().disconnect();
                 return;
@@ -259,7 +279,7 @@ public final class ConnectionManager {
             }
             boolean excludeVanilla = knownPacks.contains(SelectKnownPacksPacket.MINECRAFT_CORE);
 
-            Registries registries = MinecraftServer.process();
+            Registries registries = MinecraftServer.getRegistries();
             player.sendPackets(Registries.registryDataPackets(registries, excludeVanilla));
             // TODO: TEST_ENVIRONMENT, TEST_INSTANCE
 
@@ -360,7 +380,7 @@ public final class ConnectionManager {
      *
      * @param tickStart the time of the update in nanoseconds, forwarded to the packet
      */
-    private void handleKeepAlive(Collection<Player> playerGroup, long tickStart) {
+    private static void handleKeepAlive(Collection<Player> playerGroup, long tickStart) {
         final KeepAlivePacket keepAlivePacket = new KeepAlivePacket(tickStart);
         for (Player player : playerGroup) {
             final long lastKeepAlive = tickStart - player.getLastKeepAlive();

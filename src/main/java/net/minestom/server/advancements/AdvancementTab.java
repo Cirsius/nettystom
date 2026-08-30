@@ -5,8 +5,16 @@ import net.minestom.server.entity.Player;
 import net.minestom.server.network.packet.server.play.AdvancementsPacket;
 import net.minestom.server.utils.validate.Check;
 import org.jetbrains.annotations.Nullable;
+import org.jetbrains.annotations.Unmodifiable;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArraySet;
 
 /**
@@ -33,6 +41,7 @@ public class AdvancementTab implements Viewable {
     // will never change (since the root identifier is always the same)
     protected final AdvancementsPacket removePacket;
 
+    @SuppressWarnings("this-escape") // deliberate self registration during construction
     protected AdvancementTab(String rootIdentifier, AdvancementRoot root) {
         this.root = root;
         cacheAdvancement(rootIdentifier, root, null);
@@ -99,6 +108,7 @@ public class AdvancementTab implements Viewable {
      * @param advancement the advancement
      * @param parent      the parent of this advancement, only null for the root advancement
      */
+    @SuppressWarnings("this-escape") // deliberate self registration during construction
     private void cacheAdvancement(String identifier, Advancement advancement, @Nullable Advancement parent) {
         Check.stateCondition(advancement.getTab() != null,
                 "You tried to add an advancement already linked to a tab");
@@ -131,8 +141,20 @@ public class AdvancementTab implements Viewable {
     }
 
     @Override
+    @Unmodifiable
     public Set<? extends Player> getViewers() {
-        return viewers;
+        return Collections.unmodifiableSet(viewers);
+    }
+
+    protected void removeAllViewers() {
+        viewers.removeIf(player -> {
+            if (player.isRemoved()) {
+                return true;
+            }
+            player.sendPacket(removePacket);
+            removePlayer(player);
+            return true;
+        });
     }
 
     /**
@@ -141,7 +163,7 @@ public class AdvancementTab implements Viewable {
      * @param player the player
      */
     private void addPlayer(Player player) {
-        Set<AdvancementTab> tabs = PLAYER_TAB_MAP.computeIfAbsent(player.getUuid(), p -> new CopyOnWriteArraySet<>());
+        Set<AdvancementTab> tabs = PLAYER_TAB_MAP.computeIfAbsent(player.getUuid(), _ -> new CopyOnWriteArraySet<>());
         tabs.add(this);
     }
 

@@ -13,7 +13,12 @@ import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.Nullable;
 
 import java.nio.charset.StandardCharsets;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Base64;
+import java.util.Collection;
+import java.util.List;
+import java.util.Objects;
 
 public record Status(
         Component description,
@@ -90,6 +95,8 @@ public record Status(
         }
 
         /**
+         * Creates a {@link PlayerInfo} with the online count and a sample of online players.
+         *
          * @param maxSamples The maximum number of player entries to include in the sample
          * @return A {@link PlayerInfo} containing the online count, and a sample of online players.
          */

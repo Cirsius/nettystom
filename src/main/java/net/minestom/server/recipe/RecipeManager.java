@@ -15,7 +15,12 @@ import net.minestom.server.registry.RegistryTag;
 import net.minestom.server.utils.validate.Check;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Predicate;
@@ -37,7 +42,7 @@ public final class RecipeManager {
             Int2ObjectMaps.synchronize(new Int2ObjectArrayMap<>());
 
     public void addRecipe(Recipe recipe) {
-        addRecipe(recipe, player -> true);
+        addRecipe(recipe, _ -> true);
     }
 
     public void addRecipe(Recipe recipe, Predicate<Player> predicate) {
@@ -113,7 +118,7 @@ public final class RecipeManager {
         final Map<RecipeProperty, Set<Material>> itemProperties = new HashMap<>();
         for (var recipe : recipes.keySet()) {
             for (var entry : recipe.itemProperties().entrySet()) {
-                itemProperties.computeIfAbsent(entry.getKey(), k -> new HashSet<>()).addAll(entry.getValue());
+                itemProperties.computeIfAbsent(entry.getKey(), _ -> new HashSet<>()).addAll(entry.getValue());
             }
         }
         final Map<RecipeProperty, List<Material>> itemPropertiesLists = new HashMap<>();

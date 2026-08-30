@@ -12,7 +12,7 @@ import org.jetbrains.annotations.Nullable;
 public class CatMeta extends TameableAnimalMeta {
     private static final DyeColor[] DYE_VALUES = DyeColor.values();
 
-    public CatMeta(Entity entity, MetadataHolder metadata) {
+    public CatMeta(@Nullable Entity entity, MetadataHolder metadata) {
         super(entity, metadata);
     }
 
@@ -77,6 +77,7 @@ public class CatMeta extends TameableAnimalMeta {
     }
 
     @Override
+    @SuppressWarnings("unchecked")
     protected <T> void set(DataComponent<T> component, T value) {
         if (component == DataComponents.CAT_VARIANT)
             setVariant((RegistryKey<CatVariant>) value);

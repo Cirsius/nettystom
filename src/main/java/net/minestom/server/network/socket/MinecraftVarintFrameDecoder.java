@@ -6,24 +6,7 @@ import io.netty.handler.codec.ByteToMessageDecoder;
 
 import java.util.List;
 
-/**
- * Netty {@link ByteToMessageDecoder} that frames Minecraft's varint-length-prefixed
- * packets.
- *
- * <p>Minecraft sends packets as:
- * <pre>
- *   [VarInt: packet length][packet bytes …]
- * </pre>
- *
- * This decoder accumulates bytes until a full frame is available, then passes
- * the <em>payload</em> (without the length prefix) downstream.
- *
- * <p>No {@code java.nio.*} imports are used.
- */
 public final class MinecraftVarintFrameDecoder extends ByteToMessageDecoder {
-
-    /** Hard limit to guard against memory-exhaustion attacks (2 MiB). */
-    private static final int MAX_PACKET_LENGTH = 1 << 21; // 2 097 152
 
     @Override
     protected void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) {

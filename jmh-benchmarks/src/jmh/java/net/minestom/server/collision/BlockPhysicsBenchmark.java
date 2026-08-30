@@ -4,7 +4,16 @@ import net.minestom.server.coordinate.Pos;
 import net.minestom.server.coordinate.Vec;
 import net.minestom.server.instance.WorldBorder;
 import net.minestom.server.instance.block.Block;
-import org.openjdk.jmh.annotations.*;
+import org.openjdk.jmh.annotations.Benchmark;
+import org.openjdk.jmh.annotations.BenchmarkMode;
+import org.openjdk.jmh.annotations.Fork;
+import org.openjdk.jmh.annotations.Measurement;
+import org.openjdk.jmh.annotations.Mode;
+import org.openjdk.jmh.annotations.OutputTimeUnit;
+import org.openjdk.jmh.annotations.Scope;
+import org.openjdk.jmh.annotations.Setup;
+import org.openjdk.jmh.annotations.State;
+import org.openjdk.jmh.annotations.Warmup;
 
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -24,6 +33,8 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  *     <li>{@link #largeMoveSlow()} - {@code slowPhysics} ray-cast (velocity length &gt; 1)</li>
  *     <li>{@link #fenceCollision()} - multi-box shape + tall-below ({@code shouldCheckLower}) path</li>
  *     <li>{@link #denseCollision()} - collisions on all axes, multiple step-physics iterations</li>
+ *     <li>{@link #walkOnFloorFarBorder()} - {@link #walkOnFloor()} plus a distant border (skip path)</li>
+ *     <li>{@link #walkIntoBorder()} - {@link #walkOnFloor()} into a border wall (sweep engaged)</li>
  *     <li>{@link #simulateOnGround()} - full movement incl. friction lookup + velocity update</li>
  *     <li>{@link #simulateFalling()} - full movement incl. gravity velocity update</li>
  * </ul>
@@ -41,23 +52,25 @@ public class BlockPhysicsBenchmark {
     // Representative player aerodynamics (gravity, horizontal drag, vertical drag)
     private static final Aerodynamics AERO = new Aerodynamics(0.08, 0.91, 0.98);
     private static final WorldBorder BORDER = WorldBorder.DEFAULT_BORDER;
+    // Walls at +-1, so walking +x from x=0.6 crosses the wall at x=1 (entity-relative 0.7).
+    private static final WorldBorder NEAR_BORDER = new WorldBorder(2, 0, 0, 0, 0);
 
     // --- In-memory block getters ---
 
     /** Everything is air: exercises face traversal with no collisions. */
-    private static final Block.Getter AIR_GETTER = condGetter((x, y, z) -> Block.AIR);
+    private static final Block.Getter AIR_GETTER = condGetter((_, _, _) -> Block.AIR);
 
     /** Stone floor with its top surface at y=64 (block layer y<=63), air above. */
-    private static final Block.Getter FLOOR_GETTER = condGetter((x, y, z) -> y <= 63 ? Block.STONE : Block.AIR);
+    private static final Block.Getter FLOOR_GETTER = condGetter((_, y, _) -> y <= 63 ? Block.STONE : Block.AIR);
 
     /** Solid stone everywhere: maximal collision on every axis. */
-    private static final Block.Getter DENSE_GETTER = condGetter((x, y, z) -> Block.STONE);
+    private static final Block.Getter DENSE_GETTER = condGetter((_, _, _) -> Block.STONE);
 
     /**
      * Stone floor (y<=62) topped by a layer of fences at y=63. Fences are multi-box, 1.5 tall shapes,
      * so this drives {@link ShapeImpl#intersectBoxSwept} over several boxes and the tall-below branch.
      */
-    private static final Block.Getter FENCE_GETTER = condGetter((x, y, z) -> {
+    private static final Block.Getter FENCE_GETTER = condGetter((_, y, _) -> {
         if (y <= 62) return Block.STONE;
         if (y == 63) return Block.OAK_FENCE;
         return Block.AIR;
@@ -66,9 +79,9 @@ public class BlockPhysicsBenchmark {
     // Getters that take a read lock per block lookup, mimicking the real ChunkCache cost (which the
     // plain lambda getters above do not capture). Used to measure the benefit of fewer/deduplicated
     // block lookups in the physics paths.
-    private static final Block.Getter LOCKING_FLOOR_GETTER = lockingGetter((x, y, z) -> y <= 63 ? Block.STONE : Block.AIR);
-    private static final Block.Getter LOCKING_DENSE_GETTER = lockingGetter((x, y, z) -> Block.STONE);
-    private static final Block.Getter LOCKING_AIR_GETTER = lockingGetter((x, y, z) -> Block.AIR);
+    private static final Block.Getter LOCKING_FLOOR_GETTER = lockingGetter((_, y, _) -> y <= 63 ? Block.STONE : Block.AIR);
+    private static final Block.Getter LOCKING_DENSE_GETTER = lockingGetter((_, _, _) -> Block.STONE);
+    private static final Block.Getter LOCKING_AIR_GETTER = lockingGetter((_, _, _) -> Block.AIR);
 
     // Cached "standing on the ground" physics result, primed in setup.
     private Pos restPos;
@@ -150,6 +163,22 @@ public class BlockPhysicsBenchmark {
                 new Vec(0.3, -0.3, 0.3), null, false);
     }
 
+    // --- world border variants: measure the border sweep cost against walkOnFloor ---
+
+    @Benchmark
+    public PhysicsResult walkOnFloorFarBorder() {
+        // The default 60M block border takes the up-front in-bounds skip path.
+        return CollisionUtils.handlePhysics(FLOOR_GETTER, BORDER, PLAYER_BB, new Pos(0.5, 64.0, 0.5),
+                new Vec(0.2, -0.08, 0.15), null, false);
+    }
+
+    @Benchmark
+    public PhysicsResult walkIntoBorder() {
+        // The target crosses the wall at x=1, so the border is swept on every slide pass.
+        return CollisionUtils.handlePhysics(FLOOR_GETTER, NEAR_BORDER, PLAYER_BB, new Pos(0.6, 64.0, 0.5),
+                new Vec(0.2, -0.08, 0.15), null, false);
+    }
+
     // --- locking-getter variants: measure block-lookup cost (dedup benefit) ---
 
     @Benchmark
@@ -198,12 +227,12 @@ public class BlockPhysicsBenchmark {
     }
 
     private static Block.Getter condGetter(BlockAt fn) {
-        return (x, y, z, condition) -> fn.get(x, y, z);
+        return (x, y, z, _) -> fn.get(x, y, z);
     }
 
     private static Block.Getter lockingGetter(BlockAt fn) {
         final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
-        return (x, y, z, condition) -> {
+        return (x, y, z, _) -> {
             lock.readLock().lock();
             try {
                 return fn.get(x, y, z);

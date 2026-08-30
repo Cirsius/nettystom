@@ -1,6 +1,5 @@
 package net.minestom.demo.commands;
 
-import net.kyori.adventure.identity.Identity;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.event.ClickEvent;
 import net.minestom.server.command.builder.Command;
@@ -12,7 +11,7 @@ public class EchoCommand extends Command {
     public EchoCommand() {
         super("echo");
 
-        this.setDefaultExecutor((sender, context) -> sender.sendMessage(
+        this.setDefaultExecutor((sender, _) -> sender.sendMessage(
                 Component.text("Usage: /echo <json> [uuid]")
                         .hoverEvent(Component.text("Click to get this command.")
                         .clickEvent(ClickEvent.suggestCommand("/echo ")))));

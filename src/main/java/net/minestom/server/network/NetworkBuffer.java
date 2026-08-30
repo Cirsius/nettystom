@@ -1,6 +1,5 @@
 package net.minestom.server.network;
 
-import io.netty.buffer.ByteBuf;
 import net.kyori.adventure.key.Key;
 import net.kyori.adventure.nbt.BinaryTag;
 import net.kyori.adventure.nbt.CompoundBinaryTag;
@@ -15,19 +14,30 @@ import net.minestom.server.utils.Direction;
 import net.minestom.server.utils.Either;
 import net.minestom.server.utils.Unit;
 import net.minestom.server.utils.crypto.KeyUtils;
+import net.minestom.server.utils.validate.Check;
+import org.jetbrains.annotations.ApiStatus;
+import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.UnknownNullability;
 
 import javax.crypto.Cipher;
+import java.io.DataInput;
+import java.io.DataOutput;
 import java.io.IOException;
 import java.lang.foreign.MemorySegment;
-import java.lang.foreign.ValueLayout;
+import java.nio.channels.ReadableByteChannel;
+import java.nio.channels.WritableByteChannel;
 import java.security.PublicKey;
 import java.time.Instant;
-import java.util.*;
+import java.util.BitSet;
+import java.util.EnumSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
+import java.util.zip.DataFormatException;
 
 public sealed interface NetworkBuffer permits NetworkBufferImpl {
     Type<Unit> UNIT = new NetworkBufferTypeImpl.UnitType();
@@ -46,13 +56,17 @@ public sealed interface NetworkBuffer permits NetworkBufferImpl {
     Type<Integer> VAR_INT_3 = new NetworkBufferTypeImpl.VarInt3Type();
     Type<Long> VAR_LONG = new NetworkBufferTypeImpl.VarLongType();
     Type<byte[]> RAW_BYTES = new NetworkBufferTypeImpl.RawBytesType(-1);
+    Type<short[]> RAW_SHORTS = new NetworkBufferTypeImpl.RawShortsType(-1);
+    Type<int[]> RAW_INTS = new NetworkBufferTypeImpl.RawIntsType(-1);
+    Type<long[]> RAW_LONGS = new NetworkBufferTypeImpl.RawLongsType(-1);
+    Type<float[]> RAW_FLOATS = new NetworkBufferTypeImpl.RawFloatsType(-1);
+    Type<double[]> RAW_DOUBLES = new NetworkBufferTypeImpl.RawDoublesType(-1);
     Type<String> STRING = new NetworkBufferTypeImpl.StringType();
     Type<Key> KEY = STRING.transform(Key::key, Key::asString);
     Type<String> STRING_TERMINATED = new NetworkBufferTypeImpl.StringTerminatedType();
     Type<String> STRING_IO_UTF8 = new NetworkBufferTypeImpl.IOUTF8StringType();
-    Type<BinaryTag> NBT = new NetworkBufferTypeImpl.NbtType();
-    @SuppressWarnings({"unchecked", "rawtypes"})
-    Type<CompoundBinaryTag> NBT_COMPOUND = (Type) new NetworkBufferTypeImpl.NbtType();
+    Type<BinaryTag> NBT = BinaryTagTypeImpl.INSTANCE;
+    Type<CompoundBinaryTag> NBT_COMPOUND = BinaryTagTypeImpl.INSTANCE_COMPOUND;
     Type<Point> BLOCK_POSITION = new NetworkBufferTypeImpl.BlockPositionType();
     Type<Component> COMPONENT = new ComponentNetworkBufferTypeImpl();
     Type<Component> JSON_COMPONENT = new NetworkBufferTypeImpl.JsonComponentType();
@@ -73,7 +87,7 @@ public sealed interface NetworkBuffer permits NetworkBufferImpl {
     Type<Point> VECTOR3I = new NetworkBufferTypeImpl.Vector3IType();
     Type<Point> VECTOR3B = new NetworkBufferTypeImpl.Vector3BType();
     Type<Vec> LP_VECTOR3 = new NetworkBufferTypeImpl.LpVector3Type();
-    Type<float[]> QUATERNION = new NetworkBufferTypeImpl.QuaternionType();
+    Type<float[]> QUATERNION = FixedRawFloats(4);
 
     Type<@Nullable Component> OPT_CHAT = COMPONENT.optional();
     Type<@Nullable Point> OPT_BLOCK_POSITION = BLOCK_POSITION.optional();
@@ -85,7 +99,7 @@ public sealed interface NetworkBuffer permits NetworkBufferImpl {
 
     static <E extends Enum<E>> Type<E> Enum(Class<E> enumClass) {
         final E[] values = enumClass.getEnumConstants();
-        return VAR_INT.transform(i -> values[i], Enum::ordinal);
+        return VAR_INT.transform(integer -> values[integer], Enum::ordinal);
     }
 
     static <E extends Enum<E>> Type<EnumSet<E>> EnumSet(Class<E> enumClass) {
@@ -93,12 +107,81 @@ public sealed interface NetworkBuffer permits NetworkBufferImpl {
         return new NetworkBufferTypeImpl.EnumSetType<>(enumClass, values);
     }
 
+    /**
+     * Creates a type for a bit set of exactly {@code length} bits, stored in {@code (length + 7) / 8} bytes.
+     *
+     * @param length the bit count, which must not be negative
+     * @return the fixed length bit set type
+     */
     static Type<BitSet> FixedBitSet(int length) {
+        Check.argCondition(length < 0, "Length cannot be negative: {0}", length);
         return new NetworkBufferTypeImpl.FixedBitSetType(length);
     }
 
+    /**
+     * Creates a type for exactly {@code length} bytes, unlike {@link #RAW_BYTES} which reads every byte left in the buffer.
+     *
+     * @param length the element count, which must not be negative
+     * @return the fixed length byte type
+     */
     static Type<byte[]> FixedRawBytes(int length) {
+        Check.argCondition(length < 0, "Length cannot be negative: {0}", length);
         return new NetworkBufferTypeImpl.RawBytesType(length);
+    }
+
+    /**
+     * Creates a type for exactly {@code length} shorts, unlike {@link #RAW_SHORTS} which reads every short left in the buffer.
+     *
+     * @param length the element count, which must not be negative
+     * @return the fixed length short type
+     */
+    static Type<short[]> FixedRawShorts(int length) {
+        Check.argCondition(length < 0, "Length cannot be negative: {0}", length);
+        return new NetworkBufferTypeImpl.RawShortsType(length);
+    }
+
+    /**
+     * Creates a type for exactly {@code length} ints, unlike {@link #RAW_INTS} which reads every int left in the buffer.
+     *
+     * @param length the element count, which must not be negative
+     * @return the fixed length int type
+     */
+    static Type<int[]> FixedRawInts(int length) {
+        Check.argCondition(length < 0, "Length cannot be negative: {0}", length);
+        return new NetworkBufferTypeImpl.RawIntsType(length);
+    }
+
+    /**
+     * Creates a type for exactly {@code length} longs, unlike {@link #RAW_LONGS} which reads every long left in the buffer.
+     *
+     * @param length the element count, which must not be negative
+     * @return the fixed length long type
+     */
+    static Type<long[]> FixedRawLongs(int length) {
+        Check.argCondition(length < 0, "Length cannot be negative: {0}", length);
+        return new NetworkBufferTypeImpl.RawLongsType(length);
+    }
+
+    /**
+     * Creates a type for exactly {@code length} floats, unlike {@link #RAW_FLOATS} which reads every float left in the buffer.
+     *
+     * @param length the element count, which must not be negative
+     * @return the fixed length float type
+     */
+    static Type<float[]> FixedRawFloats(int length) {
+        Check.argCondition(length < 0, "Length cannot be negative: {0}", length);
+        return new NetworkBufferTypeImpl.RawFloatsType(length);
+    }
+
+    /**
+     * Creates a type for exactly {@code length} doubles, unlike {@link #RAW_DOUBLES} which reads every double left in the buffer.
+     *
+     * @param length the element count, which must not be negative
+     * @return the fixed length double type
+     */
+    static Type<double[]> FixedRawDoubles(int length) {
+        Check.argCondition(length < 0, "Length cannot be negative: {0}", length);
+        return new NetworkBufferTypeImpl.RawDoublesType(length);
     }
 
     static <T> Type<T> Lazy(Supplier<Type<T>> supplier) {
@@ -109,7 +192,7 @@ public sealed interface NetworkBuffer permits NetworkBufferImpl {
         return new NetworkBufferTypeImpl.TypedNbtType<>(serializer);
     }
 
-    static <L, R> Type<Either<L, R>> Either(Type<L> left, Type<R> right) {
+    static <L, R> Type<Either<L, R>> Either(NetworkBuffer.Type<L> left, NetworkBuffer.Type<R> right) {
         return new NetworkBufferTypeImpl.EitherType<>(left, right);
     }
 
@@ -128,19 +211,13 @@ public sealed interface NetworkBuffer permits NetworkBufferImpl {
         return Tagged(discriminator, discriminatorFromValue, serializerMap, null);
     }
 
-    <T> void write(Type<T> type, @UnknownNullability T value) throws IndexOutOfBoundsException;
+    <T extends @UnknownNullability Object> void write(Type<T> type, T value) throws IndexOutOfBoundsException;
 
-    <T> @UnknownNullability T read(Type<T> type) throws IndexOutOfBoundsException;
+    <T extends @UnknownNullability Object> T read(Type<T> type) throws IndexOutOfBoundsException;
 
-    <T> void writeAt(long index, Type<T> type, @UnknownNullability T value) throws IndexOutOfBoundsException;
+    <T extends @UnknownNullability Object> void writeAt(long index, Type<T> type, T value) throws IndexOutOfBoundsException;
 
-    <T> @UnknownNullability T readAt(long index, Type<T> type) throws IndexOutOfBoundsException;
-
-    /**
-     * @deprecated Use {@link #copyTo(long, byte[], int, int)} instead, as longs can easily overflow arrays.
-     */
-    @Deprecated(forRemoval = true)
-    void copyTo(long srcOffset, byte[] dest, long destOffset, long length);
+    <T extends @UnknownNullability Object> T readAt(long index, Type<T> type) throws IndexOutOfBoundsException;
 
     void copyTo(long srcOffset, byte[] dest, int destOffset, int length);
 
@@ -151,6 +228,7 @@ public sealed interface NetworkBuffer permits NetworkBufferImpl {
     NetworkBuffer clear();
 
     long writeIndex();
+
     long readIndex();
 
     NetworkBuffer writeIndex(long writeIndex);
@@ -169,13 +247,16 @@ public sealed interface NetworkBuffer permits NetworkBufferImpl {
 
     long capacity();
 
-    void readOnly();
+    @Contract(pure = true, value = "-> new")
+    NetworkBuffer readOnly();
 
     boolean isReadOnly();
 
     void resize(long newSize);
 
-    void ensureWritable(long length);
+    void ensureWritable(long length) throws IndexOutOfBoundsException;
+
+    void ensureReadable(long length) throws IndexOutOfBoundsException;
 
     void compact();
 
@@ -185,21 +266,47 @@ public sealed interface NetworkBuffer permits NetworkBufferImpl {
         return copy(index, length, readIndex(), writeIndex());
     }
 
+    int readChannel(ReadableByteChannel channel) throws IOException;
 
-    int readFromByteBuf(ByteBuf in);
-
-
-    boolean writeToByteBuf(ByteBuf out);
+    boolean writeChannel(WritableByteChannel channel) throws IOException;
 
     void cipher(Cipher cipher, long start, long length);
 
-    long compress(long start, long length, NetworkBuffer output) throws IOException;
+    long compress(long start, long length, NetworkBuffer output);
 
-    long decompress(long start, long length, NetworkBuffer output) throws IOException;
+    long decompress(long start, long length, NetworkBuffer output) throws DataFormatException;
 
     @Nullable Registries registries();
 
     void registries(@Nullable Registries registries);
+
+    /**
+     * A slice is an operation where the backing memory is used for the new buffer. Consider it a view over the backing memory region.
+     *
+     * @param offset     the position to start the slice
+     * @param byteLength the length of the slice, equal to {@link #capacity()}
+     * @param readIndex  the read index
+     * @param writeIndex the write index
+     * @return a new buffer
+     * @throws IllegalArgumentException if this buffer is a dummy
+     * @apiNote With resized segments, you could observe behavior where you may see stale data or close arenas.
+     * To avoid this, do not use resizable segments in a way where they are written or resized like {@link #resize(long)}.
+     * @implNote {@link #registries()} are copied into the new buffer
+     */
+    @Contract(pure = true, value = "_, _, _, _ -> new")
+    NetworkBuffer slice(long offset, long byteLength, long readIndex, long writeIndex);
+
+    /**
+     * Creates a new {@link IOView} of this buffer.
+     * <br>
+     * Useful to interface with API's that support {@link DataInput} or {@link DataOutput}.
+     *
+     * @return the io view.
+     */
+    @Deprecated(forRemoval = true) // Use NetworkBuffer directly, no DataInput or DataOutput replacement is provided.
+    @ApiStatus.Experimental
+    @Contract(pure = true, value = "-> new")
+    IOView ioView();
 
     interface Type<T extends @UnknownNullability Object> {
         void write(NetworkBuffer buffer, T value);
@@ -246,9 +353,7 @@ public sealed interface NetworkBuffer permits NetworkBufferImpl {
             return new NetworkBufferTypeImpl.OptionalType<>(this);
         }
 
-        default <R, TR extends R> Type<R> unionType(
-                Function<T, NetworkBuffer.Type<TR>> serializers,
-                Function<R, ? extends T> keyFunc) {
+        default <R, TR extends R> Type<R> unionType(Function<T, NetworkBuffer.Type<TR>> serializers, Function<R, ? extends T> keyFunc) {
             return new NetworkBufferTypeImpl.UnionType<>(this, keyFunc, serializers);
         }
 
@@ -270,7 +375,7 @@ public sealed interface NetworkBuffer permits NetworkBufferImpl {
     }
 
     static NetworkBuffer staticBuffer(long size) {
-        return staticBuffer(size, null);
+        return builder(size).build();
     }
 
     static NetworkBuffer resizableBuffer(long initialSize, Registries registries) {
@@ -281,7 +386,9 @@ public sealed interface NetworkBuffer permits NetworkBufferImpl {
     }
 
     static NetworkBuffer resizableBuffer(int initialSize) {
-        return resizableBuffer(initialSize, null);
+        return builder(initialSize)
+                .autoResize(AutoResize.DOUBLE)
+                .build();
     }
 
     static NetworkBuffer resizableBuffer(Registries registries) {
@@ -289,12 +396,11 @@ public sealed interface NetworkBuffer permits NetworkBufferImpl {
     }
 
     static NetworkBuffer resizableBuffer() {
-        return resizableBuffer((Registries) null);
+        return resizableBuffer(256);
     }
 
-    // todo: maybe remove segments for netty impl
     static NetworkBuffer wrap(MemorySegment segment, long readIndex, long writeIndex, @Nullable Registries registries) {
-        return wrap(segment.toArray(ValueLayout.JAVA_BYTE), Math.toIntExact(readIndex), Math.toIntExact(writeIndex), registries);
+        return NetworkBufferImpl.wrap(segment, readIndex, writeIndex, registries);
     }
 
     static NetworkBuffer wrap(MemorySegment segment, long readIndex, long writeIndex) {
@@ -302,22 +408,11 @@ public sealed interface NetworkBuffer permits NetworkBufferImpl {
     }
 
     static NetworkBuffer wrap(byte[] bytes, int readIndex, int writeIndex, @Nullable Registries registries) {
-        /* TODO(next) remove me for zero copy. The old behavior didnt actually modify the underlying array.
-            quite unfortunate and will require until waiting for the next release to change this behavior. */
-        bytes = bytes.clone();
-        return NetworkBufferImpl.wrap(bytes, readIndex, writeIndex, registries);
+        return wrap(MemorySegment.ofArray(bytes), readIndex, writeIndex, registries);
     }
 
     static NetworkBuffer wrap(byte[] bytes, int readIndex, int writeIndex) {
         return wrap(bytes, readIndex, writeIndex, null);
-    }
-
-    static NetworkBuffer fromByteBuf(ByteBuf buf, @Nullable Registries registries) {
-        return NetworkBufferImpl.fromByteBuf(buf, registries);
-    }
-
-    static NetworkBuffer fromByteBuf(ByteBuf buf) {
-        return fromByteBuf(buf, null);
     }
 
     sealed interface Builder permits NetworkBufferImpl.Builder {
@@ -333,6 +428,117 @@ public sealed interface NetworkBuffer permits NetworkBufferImpl {
         AutoResize DOUBLE = (capacity, targetSize) -> Math.max(capacity * 2, targetSize);
 
         long resize(long capacity, long targetSize);
+    }
+
+    /**
+     * Self-contained interface
+     * that extends {@link DataInput} and {@link DataOutput} for mostly reading/writing binary tags.
+     * <br>
+     * You can access the io view of a network buffer with {@link NetworkBuffer#ioView()}
+     * <br>
+     * This interface is separate from {@link NetworkBuffer}
+     * because we don't want DataInput and DataOutput to be part of the public API.
+     * You should use {@link NetworkBuffer} instead where possible.
+     *
+     * @apiNote You should never rely on the identity of {@link IOView} as it is a value class candidate.
+     * @implNote This implementation removes checked exceptions as the backing {@link NetworkBuffer} would not throw {@link IOException}'s.
+     * Also {@link #readLine()} is not implemented as it's already deprecated in {@link java.io.DataInputStream}.
+     */
+    @Deprecated(forRemoval = true) // Use NetworkBuffer directly, no DataInput or DataOutput replacement is provided.
+    @SuppressWarnings("removal")
+    @ApiStatus.Experimental
+    sealed interface IOView extends DataInput, DataOutput permits NetworkBufferImpl.IOView {
+
+        @Deprecated(forRemoval = true)
+        @Override
+        @Contract("-> fail")
+        default String readLine() {
+            throw new UnsupportedOperationException("Deprecated method readLine() called, not implemented");
+        }
+
+        @Override
+        void readFully(byte[] bytes);
+
+        @Override
+        void readFully(byte[] bytes, int off, int len);
+
+        @Override
+        int skipBytes(int n);
+
+        @Override
+        boolean readBoolean();
+
+        @Override
+        byte readByte();
+
+        @Override
+        int readUnsignedByte();
+
+        @Override
+        short readShort();
+
+        @Override
+        int readUnsignedShort();
+
+        @Override
+        char readChar();
+
+        @Override
+        int readInt();
+
+        @Override
+        long readLong();
+
+        @Override
+        float readFloat();
+
+        @Override
+        double readDouble();
+
+        @Override
+        String readUTF();
+
+        @Override
+        void write(int lower);
+
+        @Override
+        void write(byte[] bytes);
+
+        @Override
+        void write(byte[] bytes, int off, int len);
+
+        @Override
+        void writeBoolean(boolean value);
+
+        @Override
+        void writeByte(int value);
+
+        @Override
+        void writeShort(int value);
+
+        @Override
+        void writeChar(int value);
+
+        @Override
+        void writeInt(int value);
+
+        @Override
+        void writeLong(long value);
+
+        @Override
+        void writeFloat(float value);
+
+        @Override
+        void writeDouble(double value);
+
+        @Override
+        void writeBytes(String value);
+
+        @Override
+        void writeChars(String value);
+
+        @Override
+        void writeUTF(String value);
     }
 
     static byte[] makeArray(Consumer<NetworkBuffer> writing, @Nullable Registries registries) {

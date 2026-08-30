@@ -16,8 +16,14 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.atomic.AtomicReference;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
-import static org.junit.jupiter.api.Assertions.*;
 
 @EnvTest
 public class GeneratorIntegrationTest {
@@ -155,7 +161,7 @@ public class GeneratorIntegrationTest {
     @ValueSource(booleans = {false, true})
     public void loaderExceptionCompletesChunkFuture(boolean parallel, Env env) {
         var exception = new RuntimeException("loader failure");
-        env.process().exception().setExceptionHandler(throwable -> {
+        env.process().exception().setExceptionHandler(_ -> {
         });
         ChunkLoader chunkLoader = new ChunkLoader() {
             @Override

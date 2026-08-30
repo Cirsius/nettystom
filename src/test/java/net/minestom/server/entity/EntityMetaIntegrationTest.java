@@ -13,7 +13,9 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 import java.util.function.Consumer;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @EnvTest
 public class EntityMetaIntegrationTest {
@@ -76,7 +78,7 @@ public class EntityMetaIntegrationTest {
         assertEquals(4, packets.size());
     }
 
-    private void validMetaDataPackets(List<EntityMetaDataPacket> packets, int entityId, Consumer<Metadata.Entry<?>> contentChecker) {
+    private static void validMetaDataPackets(List<EntityMetaDataPacket> packets, int entityId, Consumer<Metadata.Entry<?>> contentChecker) {
         for (var packet : packets) {
             assertEquals(packet.entityId(), entityId);
             for (var entry : packet.entries().values()) {
@@ -86,6 +88,7 @@ public class EntityMetaIntegrationTest {
     }
 
     @Test
+    @SuppressWarnings("deprecation") // deliberately keeps coverage of the deprecated API until its removal
     public void customName(Env env) {
         //Base things.
         var connection = env.createConnection();
@@ -104,7 +107,7 @@ public class EntityMetaIntegrationTest {
         entity.getEntityMeta().setNotifyAboutChanges(false);
         entity.setCustomName(Component.text("Custom Name"));
         entity.setCustomNameVisible(true);
-        entity.setInstance(instance, startPos);
+        entity.setInstance(instance, startPos).join();
         entity.getEntityMeta().setNotifyAboutChanges(true);
         entity.addViewer(player);
 
@@ -151,7 +154,7 @@ public class EntityMetaIntegrationTest {
         var incomingPackets = connection.trackIncoming(EntityMetaDataPacket.class);
 
         var entity = new Entity(EntityType.ITEM_DISPLAY);
-        entity.setInstance(instance, startPos);
+        entity.setInstance(instance, startPos).join();
         var meta = (ItemDisplayMeta) entity.getEntityMeta();
 
         meta.setTransformationInterpolationStartDelta(1);

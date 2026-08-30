@@ -3,7 +3,7 @@ package net.minestom.server.crypto;
 import net.minestom.server.network.NetworkBuffer;
 import net.minestom.server.network.NetworkBufferTemplate;
 import net.minestom.server.utils.validate.Check;
-import org.jetbrains.annotations.UnknownNullability;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.Arrays;
 
@@ -25,7 +25,7 @@ public record MessageSignature(byte[] signature) {
             MessageSignature::new
     );
 
-    public record Packed(int id, @UnknownNullability MessageSignature fullSignature) {
+    public record Packed(int id, @Nullable MessageSignature fullSignature) {
         private static final int FULL_SIGNATURE = -1;
 
         public Packed(MessageSignature signature) {
