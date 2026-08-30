@@ -542,9 +542,13 @@ public sealed interface NetworkBuffer permits NetworkBufferImpl {
     }
 
     static byte[] makeArray(Consumer<NetworkBuffer> writing, @Nullable Registries registries) {
-        NetworkBuffer buffer = resizableBuffer(256, registries);
-        writing.accept(buffer);
-        return buffer.read(RAW_BYTES);
+        NetworkBufferImpl buffer = (NetworkBufferImpl) resizableBuffer(256, registries);
+        try {
+            writing.accept(buffer);
+            return buffer.read(RAW_BYTES);
+        } finally {
+            buffer.release();
+        }
     }
 
     static byte[] makeArray(Consumer<NetworkBuffer> writing) {

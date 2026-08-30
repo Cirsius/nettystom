@@ -68,6 +68,10 @@ final class NetworkBufferImpl implements NetworkBuffer {
         return dummy;
     }
 
+    void release() {
+        if (!dummy) buf.release();
+    }
+
     void assertDummy() {
         assertAlive();
         if (isDummy()) throw new IllegalArgumentException("Buffer is a dummy buffer");
